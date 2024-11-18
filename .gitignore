@@ -17,3 +17,6 @@
 **/*.log
 
 **/notes/*
+
+
+./deploy.sh

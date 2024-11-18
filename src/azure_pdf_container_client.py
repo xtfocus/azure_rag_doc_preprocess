@@ -4,19 +4,21 @@ Desc: handling I/O tasks with Blob Storage
 
 """
 
-import os
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 from azure.storage.blob import BlobClient, BlobServiceClient, ContainerClient
 from loguru import logger
 
 
 class AzurePDFContainerClient:
+    """
+    Wrapper for BlobServiceClient to work on a single container
+    """
+
     def __init__(
         self,
         client: BlobServiceClient,
         container_name: str = "default_container",
-        root_path_ingestion: str = "../",
     ):
         """
         Initialize the Azure PDF container client with a specified container name.
@@ -26,7 +28,6 @@ class AzurePDFContainerClient:
         """
         self.client: BlobServiceClient = client
         self.container_name: str = container_name
-        self.root_path_ingestion = root_path_ingestion
         logger.info(f"Making sure container {container_name} exists ...")
         self._ensure_container_exists()
 

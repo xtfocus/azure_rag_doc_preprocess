@@ -4,17 +4,11 @@ from typing import List
 from fastapi import APIRouter, HTTPException, UploadFile
 
 from src.azure_pdf_container_client import AzurePDFContainerClient
-from src.get_pipeline import get_pipeline
-from src.pipeline import MyFile, Pipeline
+from src.pipeline import MyFile
 
-from .globals import clients, configs
-from .pipeline import MyFile, Pipeline
+from .globals import clients, objects
 
 router = APIRouter()
-
-pipeline: Pipeline = get_pipeline(
-    configs["app_config"], clients["chat-completion-model"]
-)
 
 
 @router.post("/api/exec/uploads/")
@@ -28,6 +22,8 @@ async def process_files(files: List[UploadFile]):
     Returns:
         List of results for each processed file.
     """
+
+    pipeline = objects["pipeline"]
 
     async def process_single_file(file: UploadFile):
         try:
@@ -79,6 +75,8 @@ async def process_container(container_name: str):
     Returns:
         List of processing results for each file
     """
+
+    pipeline = objects["pipeline"]
 
     blob_container_client = AzurePDFContainerClient(
         client=clients["blob_service_client"], container_name=container_name

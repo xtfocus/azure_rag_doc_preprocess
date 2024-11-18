@@ -7,7 +7,10 @@ from environs import Env
 from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncAzureOpenAI
 
-from .globals import clients, configs
+from src.get_pipeline import get_pipeline
+from src.pipeline import Pipeline
+
+from .globals import clients, configs, objects
 
 
 @contextlib.asynccontextmanager
@@ -29,6 +32,10 @@ async def lifespan(app: fastapi.FastAPI):
 
     clients["blob_service_client"] = BlobServiceClient.from_connection_string(
         config.AZURE_STORAGE_CONNECTION_STRING
+    )
+
+    objects["pipeline"] = get_pipeline(
+        configs["app_config"], clients["chat-completion-model"]
     )
 
     yield
