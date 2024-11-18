@@ -43,14 +43,15 @@ case $action in
           --name $API_NAME \
           --resource-group $RESOURCE_GROUP \
           --environment $CONTAINER_ENVIRONMENT \
-          --image $ACR_NAME.azurecr.io/$API_NAME:$API_VERSION \
+          --image $ACR_NAME.azurecr.io/$IMAGE_NAME:$API_VERSION \
           --target-port 3100 \
           --ingres internal \
           --registry-server $ACR_NAME.azurecr.io \
           --query properties.configuration.ingress.fqdn \
-          --tags ProjectID="Subaru-prod" ApplicationName="Subaru-prod" OwnerService=KhangNVT PIC=TungNX23 \
+          --tags ProjectID=$PROJECT_ID ApplicationName=$PROJECT_ID OwnerService=$OWNERSERVICE PIC=$PIC \
           --env-vars $envs \
-          --cpu 0.5 --memory 1.0 # adjust as needed
+          --cpu $ALLOCATED_CPU --memory $ALLOCATED+MEMORY
+          --min-replicas $MINREPLICAS --max-replicas $MAXREPLICAS
       
           echo "Container app created with name $API_NAME, in resource group $RESOURCE_GROUP, in container environment $CONTAINER_ENVIRONMENT, from registry $ACR_NAME"
           ;;
