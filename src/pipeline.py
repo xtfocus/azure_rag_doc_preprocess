@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict, List, Tuple
 from loguru import logger
 from pydantic import BaseModel
 
+from src.azure_container_client import AzureContainerClient
 from src.file_utils import (create_file_metadata_from_bytes,
                             pdf_blob_to_pymupdf_doc)
 from src.image_descriptor import ImageDescriptor
@@ -30,6 +31,7 @@ class Pipeline:
         embedding_function: Callable,
         text_splitter: SimplePageTextSplitter,
         image_descriptor: ImageDescriptor,
+        image_container_client: AzureContainerClient,
     ):
         """Initialize the pipeline with necessary components
 
@@ -39,12 +41,14 @@ class Pipeline:
             embedding_function: Function to create embeddings
             text_splitter: Text splitting strategy
             image_descriptor: OpenAI client wrapper for image description
+            image_container_client: client wrapper for image storage
         """
         self.text_vector_store = text_vector_store
         self.image_vector_store = image_vector_store
         self.embedding_function = embedding_function
         self.text_splitter = text_splitter
         self.image_descriptor = image_descriptor
+        self.image_container_client = image_container_client
 
     async def _process_images(self, images: List[Any]) -> List[str]:
         """Process multiple images concurrently to get their descriptions
@@ -101,7 +105,7 @@ class Pipeline:
         )
 
     async def process_file(self, file: MyFile) -> Dict[str, Any]:
-        """Process a single file through the pipeline
+        """Process a single file through the pipeline with concurrent operations
 
         Args:
             file: MyFile object containing file name and content
@@ -120,26 +124,56 @@ class Pipeline:
         # Extract texts and images
         texts, images = extract_texts_and_images(doc, report=True)
 
+        # Create tasks list to gather all async operations
+        tasks = []
+
         if texts:
-            # Create and index text chunks
+            # Create text chunks
             input_texts, input_metadatas = self._create_text_chunks(
                 texts, file_metadata
             )
-            self.text_vector_store.add_texts(
-                texts=input_texts, metadatas=input_metadatas
+            # Add text indexing task
+            tasks.append(
+                asyncio.create_task(
+                    self.text_vector_store.add_texts(
+                        texts=input_texts, metadatas=input_metadatas
+                    )
+                )
             )
 
         if images:
             # Process images in parallel
             image_descriptions = await self._process_images(images)
-            # Create and index image chunks
+            # Create image chunks
             image_texts, image_metadatas = self._create_image_chunks(
                 images, image_descriptions, file_metadata
             )
-            self.image_vector_store.add_texts(
-                texts=image_texts, metadatas=image_metadatas
+            # Add image indexing task
+            tasks.append(
+                asyncio.create_task(
+                    self.image_vector_store.add_texts(
+                        texts=image_texts, metadatas=image_metadatas
+                    )
+                )
             )
 
+            # Add image upload task
+            tasks.append(
+                asyncio.create_task(
+                    self.image_container_client.upload_base64_image_to_blob(
+                        (i["chunk_id"] for i in image_metadatas),
+                        (image.image_base64 for image in images),
+                    )
+                )
+            )
+
+        # Wait for all tasks to complete
+        if tasks:
+            await asyncio.gather(*tasks)
+            if images:
+                logger.info(
+                    f"Saved images to blob container {self.image_container_client.container_name}"
+                )
         else:
             logger.info(f"Neither text nor image found in {file.file_name}")
 

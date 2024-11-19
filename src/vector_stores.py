@@ -63,11 +63,11 @@ class MyAzureSearch:
             self.index_client.create_index(index)
             logger.info(f"Index '{self.index_name}' has been created.")
 
-    def upload_documents(self, documents):
+    async def upload_documents(self, documents):
         """Uploads documents to the Azure Search index."""
         self.search_client.upload_documents(documents=documents)
 
-    def add_texts(self, texts, metadatas=None):
+    async def add_texts(self, texts, metadatas=None):
         """Adds texts and their associated metadata to the Azure Search index."""
         documents = []
 
@@ -87,7 +87,7 @@ class MyAzureSearch:
             documents.append(doc)
 
         # Upload prepared documents to the index
-        upload_success = self.upload_documents(documents)
+        upload_success = await self.upload_documents(documents)
         return upload_success
 
     def search(self, search_text):

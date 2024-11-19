@@ -1,5 +1,6 @@
 from openai import AsyncAzureOpenAI
 
+from src.azure_container_client import AzureContainerClient
 from src.get_vector_stores import get_vector_stores
 from src.image_descriptor import ImageDescriptor
 from src.pipeline import Pipeline
@@ -7,7 +8,9 @@ from src.splitters import SimplePageTextSplitter
 from src.vector_stores import MyAzureOpenAIEmbeddings
 
 
-def get_pipeline(config, oai_client: AsyncAzureOpenAI) -> Pipeline:
+def get_pipeline(
+    config, oai_client: AsyncAzureOpenAI, image_container_client: AzureContainerClient
+) -> Pipeline:
 
     vector_stores = get_vector_stores(config)
     image_vector_store = vector_stores["image_vector_store"]
@@ -57,5 +60,6 @@ def get_pipeline(config, oai_client: AsyncAzureOpenAI) -> Pipeline:
         my_embedding_function,
         text_splitter,
         image_descriptor,
+        image_container_client,
     )
     return pipeline

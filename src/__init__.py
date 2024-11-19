@@ -7,6 +7,8 @@ from environs import Env
 from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncAzureOpenAI
 
+from src.azure_container_client import AzureContainerClient
+from src.check_duplicates import DuplicateChecker
 from src.get_pipeline import get_pipeline
 from src.pipeline import Pipeline
 
@@ -34,8 +36,20 @@ async def lifespan(app: fastapi.FastAPI):
         config.AZURE_STORAGE_CONNECTION_STRING
     )
 
+    clients["image_container_client"] = AzureContainerClient(
+        client=clients["blob_service_client"],
+        container_name=config.IMAGE_CONTAINER_NAME,
+    )
+
     objects["pipeline"] = get_pipeline(
-        configs["app_config"], clients["chat-completion-model"]
+        configs["app_config"],
+        clients["chat-completion-model"],
+        clients["image_container_client"],
+    )
+
+    objects["duplicate-checker"] = DuplicateChecker(
+        client=clients["blob_service_client"],
+        container_name="known-files-container",
     )
 
     yield

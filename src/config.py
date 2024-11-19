@@ -32,7 +32,6 @@ class ModelConfig:
         "AZURE_STORAGE_CONNECTION_STRING", ""
     )
     MODEL_DEPLOYMENT: str = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT", "")
-    ROOT_PATH_INGESTION = "."
     SEMANTIC_CONFIGURATION_NAME = os.getenv(
         "SEMANTIC_CONFIGURATION_NAME", "my-semantic-config"
     )
@@ -43,3 +42,4 @@ class ModelConfig:
 
     TEXT_INDEX_NAME = os.getenv("TEXT_INDEX_NAME", "my-text-index")
     IMAGE_INDEX_NAME = os.getenv("IMAGE_INDEX_NAME", "my-image-index")
+    IMAGE_CONTAINER_NAME = os.getenv("IMAGE_CONTAINER_NAME", "my-image-container")
