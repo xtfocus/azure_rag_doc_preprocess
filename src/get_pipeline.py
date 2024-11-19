@@ -20,7 +20,9 @@ def get_pipeline(
         config,
         "You are a useful AI assistant who can describe images. You will be provided an image. "
         "Describe the image in details in Markdown format. Preserve numeric information. Do not "
-        "add your own information or assumption.",
+        "add your own information or assumption. If the provided image is a simple shape or a logo, "
+        "you must answer 'a shape' or 'a logo' without any additional details, because these images"
+        "carry no information of interest.",
     )
 
     my_embedding_function = MyAzureOpenAIEmbeddings(

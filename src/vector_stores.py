@@ -67,24 +67,80 @@ class MyAzureSearch:
         """Uploads documents to the Azure Search index."""
         self.search_client.upload_documents(documents=documents)
 
-    async def add_texts(self, texts, metadatas=None):
+    @staticmethod
+    def filtered_texts_and_metadatas_by_min_length(texts, metadatas, min_len=10):
+
+        # Filter texts and metadatas where text length is >= 10
+        filtered_batch = [
+            (text, metadata)
+            for text, metadata in zip(texts, metadatas)
+            if len(text) >= min_len
+        ]
+
+        # Unpack the filtered batch back into separate lists
+        filtered_texts, filtered_metadatas = (
+            zip(*filtered_batch) if filtered_batch else ([], [])
+        )
+
+        diff = len(texts) - len(filtered_texts)
+
+        if diff:
+            logger.info(
+                f"{diff} texts removed by length: {[i for i in texts if len(i) < min_len]}"
+            )
+
+        return filtered_texts, filtered_metadatas
+
+    async def add_texts(
+        self,
+        texts: List[str],
+        metadatas=None,
+        batch_size: int = 10,
+        filter_by_min_len: int = 0,
+    ):
         """Adds texts and their associated metadata to the Azure Search index."""
         documents = []
 
-        for i, text in enumerate(texts):
-            metadata = metadatas[i] if metadatas else {}
-            doc = {
-                "chunk_id": metadata[
-                    "chunk_id"
-                ],  # Generate a unique ID for each document
-                "chunk": text
-                or "no description",  # Make sure some text is there otherwise the embedding api raise error
-                "vector": self.embedding_function(text),
-                "metadata": json.dumps(metadata["metadata"]),
-                "parent_id": metadata["parent_id"],
-                "title": metadata["title"],
-            }
-            documents.append(doc)
+        for i in range(0, len(texts), batch_size):
+            batch_texts = texts[i : i + batch_size]
+            batch_metadatas = (
+                metadatas[i : i + batch_size] if metadatas else [{}] * len(batch_texts)
+            )
+
+            if filter_by_min_len:
+                filtered_texts, filtered_metadatas = (
+                    self.filtered_texts_and_metadatas_by_min_length(
+                        batch_texts, batch_metadatas, min_len=filter_by_min_len
+                    )
+                )
+            else:
+                filtered_texts, filtered_metadatas = batch_texts, batch_metadatas
+
+            if not bool(filtered_texts):
+                continue
+
+            try:
+                # Batch embed texts
+                embeddings = self.embedding_function(filtered_texts)
+            except Exception as e:
+                logger.error(f" Error during text embedding for batch {i}: {str(e)}")
+                logger.error(
+                    "Showing batch \n" + "<end>\n---\n<start>".join(filtered_texts)
+                )
+                raise
+
+            for text, embedding, metadata in zip(
+                filtered_texts, embeddings, filtered_metadatas
+            ):
+                doc = {
+                    "chunk_id": metadata["chunk_id"],
+                    "chunk": text or "no description",
+                    "vector": embedding,
+                    "metadata": json.dumps(metadata["metadata"]),
+                    "parent_id": metadata["parent_id"],
+                    "title": metadata["title"],
+                }
+                documents.append(doc)
 
         # Upload prepared documents to the index
         upload_success = await self.upload_documents(documents)
@@ -141,17 +197,17 @@ class MyAzureOpenAIEmbeddings:
         self.model = model
         self.dimensions = dimensions
 
-    def embed_query(self, text: str) -> list:
+    def embed_query(self, texts: List[str]) -> List[list]:
         """
-        Generates embeddings for the given text.
+        Generates embeddings for a batch of texts.
 
         Args:
-            text (str): The input text to generate embeddings for.
+            texts (List[str]): List of input texts to generate embeddings for.
 
         Returns:
-            list: The embedding vector.
+            List[list]: List of embedding vectors.
         """
         response = self.client.embeddings.create(
-            input=[text], model=self.model, dimensions=self.dimensions
+            input=texts, model=self.model, dimensions=self.dimensions
         )
-        return response.data[0].embedding
+        return [item.embedding for item in response.data]

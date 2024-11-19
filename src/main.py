@@ -1,7 +1,7 @@
 import asyncio
-from typing import Any, Dict, List
+from typing import List
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile
 from loguru import logger
 
 from src.azure_container_client import AzureContainerClient
@@ -10,6 +10,9 @@ from src.pipeline import MyFile
 from .globals import clients, objects
 
 router = APIRouter()
+
+# Shared results store (use a more robust storage mechanism in production)
+background_results = {}
 
 
 @router.post("/api/exec/uploads/")
@@ -72,85 +75,79 @@ async def process_files(files: List[UploadFile]):
 
 
 @router.post("/api/exec/blob_container/")
-async def process_container(container_name: str):
+async def process_container(
+    container_name: str,
+    background_tasks: BackgroundTasks,
+):
     """
-    Process all files in an Azure blob container asynchronously.
+    Start processing all files in an Azure blob container in the background.
 
     Args:
-        container_name: Name of the container to process
+        container_name: Name of the container to process.
 
     Returns:
-        List of processing results for each file
+        A message indicating the task has been started.
     """
-
     pipeline = objects["pipeline"]
-
     blob_container_client = AzureContainerClient(
         client=clients["blob_service_client"], container_name=container_name
     )
+    duplicate_checker = objects["duplicate-checker"]
 
-    # List all blobs in the container
+    # Launch the background task
+    background_tasks.add_task(
+        process_all_blobs,
+        container_name,
+        blob_container_client,
+        pipeline,
+        duplicate_checker,
+    )
+
+    return {"message": f"Processing of container '{container_name}' started."}
+
+
+async def process_all_blobs(
+    container_name: str,
+    blob_container_client,
+    pipeline,
+    duplicate_checker,
+):
     blob_names = blob_container_client.list_blob_names()
+    results = []
+    for blob_name in blob_names:
+        res = await process_blob(
+            blob_name, blob_container_client, pipeline, duplicate_checker
+        )
+        results.append(res)
 
-    # blob_names = ["36pact_ooizumi.pdf"]
+    background_results[container_name] = results
 
-    logger.info(f"Known: {objects['duplicate-checker'].known_dict}")
 
-    async def process_blob(name: str):
-        try:
+async def process_blob(
+    blob_name: str,
+    blob_container_client,
+    pipeline,
+    duplicate_checker,
+):
+    try:
+        if not duplicate_checker.duplicate_by_file_name(blob_name):
 
-            if not objects["duplicate-checker"].duplicate_by_file_name(name):
-                # Download file content asynchronously using asyncio.to_thread for a blocking IO
-                file_content = await asyncio.to_thread(
-                    blob_container_client.download_file, name
-                )
-
-                # Create MyFile object
-                file = MyFile(file_name=name, file_content=file_content)
-
-                # Process the file using the pipeline
-                result = await pipeline.process_file(file)
-
-                objects["duplicate-checker"].update(file_name=name)
-
-                objects["duplicate-checker"].save()
-                return result
-
-            else:
-                raise ValueError(f"{name} already processed. Skipping...")
-
-        except Exception as e:
-            # Raise an HTTPException with details about the failed blob
-            raise HTTPException(
-                status_code=500, detail=f"Error processing blob '{name}': {str(e)}"
+            # Download file content asynchronously
+            file_content = await asyncio.to_thread(
+                blob_container_client.download_file, blob_name
             )
+            file = MyFile(file_name=blob_name, file_content=file_content)
 
-    result: List = []
-    for name in blob_names:
-        res = await process_blob(name)
-        result.append(res)
-    # # Process blobs concurrently with semaphore to limit concurrency
-    # semaphore = asyncio.Semaphore(5)  # Limit concurrent processing
-    #
-    # async def bounded_process_blob(name: str) -> Dict[str, Any]:
-    #     """Process blob with concurrency limit"""
-    #     async with semaphore:
-    #         return await process_blob(name)
-    #
-    # # Create and gather tasks
-    # tasks = [bounded_process_blob(name) for name in blob_names]
-    # results = await asyncio.gather(*tasks, return_exceptions=True)
+            # Process the file
+            result = await pipeline.process_file(file)
 
-    # Filter out and log exceptions
-    final_results = []
-    for index, result in enumerate(results):
-        if isinstance(result, Exception):
-            # Log the error here if needed
-            logger.error(f"Error processing blob '{blob_names[index]}': {result}")
-            final_results.append({"blob_name": blob_names[index], "error": str(result)})
+            duplicate_checker.update(file_name=blob_name)
+            duplicate_checker.save()
+            return {"blob_name": blob_name, "result": result}
+
         else:
-            final_results.append(
-                {"blob_name": blob_names[index], "result": str(result)}
-            )
-
-    return final_results
+            logger.error(f"{blob_name} already processed. SKIPPING ... ")
+            return {"blob_name": blob_name, "error": f"{blob_name} already processed."}
+    except Exception as e:
+        logger.error(f"Error processing blob '{blob_name}': {str(e)}")
+        return {"blob_name": blob_name, "error": str(e)}

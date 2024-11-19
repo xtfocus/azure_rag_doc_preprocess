@@ -144,6 +144,9 @@ class Pipeline:
         if images:
             # Process images in parallel
             image_descriptions = await self._process_images(images)
+
+            # fill empty string with 'unknown'
+
             # Create image chunks
             image_texts, image_metadatas = self._create_image_chunks(
                 images, image_descriptions, file_metadata
@@ -152,7 +155,9 @@ class Pipeline:
             tasks.append(
                 asyncio.create_task(
                     self.image_vector_store.add_texts(
-                        texts=image_texts, metadatas=image_metadatas
+                        texts=image_texts,
+                        metadatas=image_metadatas,
+                        filter_by_min_len=10,
                     )
                 )
             )
