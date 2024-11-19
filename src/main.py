@@ -29,6 +29,8 @@ async def process_files(files: List[UploadFile]):
 
     pipeline = objects["pipeline"]
 
+    objects["duplicate-checker"]._ensure_container_exists()
+
     async def process_single_file(file: UploadFile):
         try:
 
@@ -94,6 +96,8 @@ async def process_container(
     )
     duplicate_checker = objects["duplicate-checker"]
 
+    duplicate_checker._ensure_container_exists()
+
     # Launch the background task
     background_tasks.add_task(
         process_all_blobs,
@@ -121,6 +125,8 @@ async def process_all_blobs(
         results.append(res)
 
     background_results[container_name] = results
+
+    logger.info(f"Processed all documents in {container_name}:\n {results}")
 
 
 async def process_blob(

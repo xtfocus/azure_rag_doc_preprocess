@@ -50,7 +50,7 @@ case $action in
           --query properties.configuration.ingress.fqdn \
           --tags ProjectID=$PROJECT_ID ApplicationName=$PROJECT_ID OwnerService=$OWNERSERVICE PIC=$PIC \
           --env-vars $envs \
-          --cpu $ALLOCATED_CPU --memory $ALLOCATED+MEMORY
+          --cpu $ALLOCATED_CPU --memory $ALLOCATED_MEMORY \
           --min-replicas $MINREPLICAS --max-replicas $MAXREPLICAS
       
           echo "Container app created with name $API_NAME, in resource group $RESOURCE_GROUP, in container environment $CONTAINER_ENVIRONMENT, from registry $ACR_NAME"

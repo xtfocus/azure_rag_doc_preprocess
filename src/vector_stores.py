@@ -142,9 +142,10 @@ class MyAzureSearch:
                 }
                 documents.append(doc)
 
-        # Upload prepared documents to the index
-        upload_success = await self.upload_documents(documents)
-        return upload_success
+        if documents:
+            # Upload prepared documents to the index
+            upload_success = await self.upload_documents(documents)
+            return upload_success
 
     def search(self, search_text):
         """Performs a search on the Azure Search index."""

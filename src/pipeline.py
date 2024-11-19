@@ -50,16 +50,17 @@ class Pipeline:
         self.image_descriptor = image_descriptor
         self.image_container_client = image_container_client
 
-    async def _process_images(self, images: List[Any]) -> List[str]:
-        """Process multiple images concurrently to get their descriptions
+    async def _process_images(
+        self, images: List[Any], max_concurrent_requests: int = 5
+    ) -> List[str]:
+        """Process multiple images concurrently with rate limiting using a semaphore."""
+        semaphore = asyncio.Semaphore(max_concurrent_requests)
 
-        Args:
-            images: List of image objects with image_base64 attribute
+        async def process_single_image(image):
+            async with semaphore:
+                return await self.image_descriptor.run(image.image_base64)
 
-        Returns:
-            List[str]: List of image descriptions
-        """
-        tasks = [self.image_descriptor.run(img.image_base64) for img in images]
+        tasks = [process_single_image(img) for img in images]
         return await asyncio.gather(*tasks)
 
     def _create_text_chunks(
@@ -144,8 +145,6 @@ class Pipeline:
         if images:
             # Process images in parallel
             image_descriptions = await self._process_images(images)
-
-            # fill empty string with 'unknown'
 
             # Create image chunks
             image_texts, image_metadatas = self._create_image_chunks(
