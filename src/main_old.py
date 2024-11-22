@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Callable, List
+from typing import List
 
 from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException,
                      UploadFile)
@@ -26,24 +26,24 @@ async def ensure_no_active_tasks():
     if task_counter.is_busy:
         raise HTTPException(
             status_code=409,
-            detail=f"There are {task_counter.active_tasks} background tasks still running. Please try again later.",
+            detail="Background task is still running. Please try again later.",
         )
     yield
 
 
-def run_with_task_counter(func: Callable[..., Any]) -> Callable[..., Any]:
+def wrap_background_task(func):
     """
-    Decorator to wrap a function with task counter increment and decrement logic.
+    Decorator to wrap background tasks with counter logic
     """
 
-    async def wrapper(*args, **kwargs):
+    async def wrapped(*args, **kwargs):
         task_counter.increment()
         try:
-            return await func(*args, **kwargs)
+            await func(*args, **kwargs)
         finally:
             task_counter.decrement()
 
-    return wrapper
+    return wrapped
 
 
 @router.post("/api/exec/uploads/")
@@ -64,9 +64,10 @@ async def process_files(
 
     objects["duplicate-checker"]._ensure_container_exists()
 
-    @run_with_task_counter
     async def process_single_file(file: UploadFile):
         try:
+
+            task_counter.increment()
             if not objects["duplicate-checker"].duplicate_by_file_name(file.filename):
                 # Read file content asynchronously
                 file_content = await file.read()
@@ -87,6 +88,8 @@ async def process_files(
                 status_code=500,
                 detail=f"Error processing file '{file.filename}': {str(e)}",
             )
+        finally:
+            task_counter.decrement()
 
     # Create tasks for processing each file
     tasks = [process_single_file(file) for file in files]
@@ -145,7 +148,6 @@ async def reindex_file(
     }
 
 
-@run_with_task_counter
 async def reindex_file_background(
     container_name: str,
     file_name: str,
@@ -162,6 +164,8 @@ async def reindex_file_background(
         pipeline: The processing pipeline instance.
     """
     try:
+
+        task_counter.increment()
 
         # Download file content asynchronously
         file_content = await asyncio.to_thread(
@@ -183,13 +187,14 @@ async def reindex_file_background(
         logger.error(
             f"Error during reindexing of file '{file_name}' in container '{container_name}': {str(e)}"
         )
+    finally:
+        task_counter.decrement()
 
 
 @router.post("/api/exec/blob_container/")
 async def process_container(
     container_name: str,
     background_tasks: BackgroundTasks,
-    _: None = Depends(ensure_no_active_tasks),
 ):
     """
     Start processing all files in an Azure blob container in the background.
@@ -220,7 +225,6 @@ async def process_container(
     return {"message": f"Processing of container '{container_name}' started."}
 
 
-@run_with_task_counter
 async def process_all_blobs(
     container_name: str,
     blob_container_client,
@@ -240,7 +244,6 @@ async def process_all_blobs(
     logger.info(f"Processed all documents in {container_name}:\n {results}")
 
 
-@run_with_task_counter
 async def process_blob(
     blob_name: str,
     blob_container_client,

@@ -10,7 +10,6 @@ from openai import AsyncAzureOpenAI
 from src.azure_container_client import AzureContainerClient
 from src.check_duplicates import DuplicateChecker
 from src.get_pipeline import get_pipeline
-from src.pipeline import Pipeline
 
 from .globals import clients, configs, objects
 

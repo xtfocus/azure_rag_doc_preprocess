@@ -15,14 +15,24 @@ def get_pipeline(
     vector_stores = get_vector_stores(config)
     image_vector_store = vector_stores["image_vector_store"]
     text_vector_store = vector_stores["text_vector_store"]
+
     image_descriptor = ImageDescriptor(
         oai_client,
         config,
-        "You are a useful AI assistant who can describe images. You will be provided an image. "
-        "Describe the image in details in Markdown format. Preserve numeric information. Do not "
-        "add your own information or assumption. If the provided image is a simple shape or a logo, "
-        "you must answer 'a shape' or 'a logo' without any additional details, because these images"
-        "carry no information of interest.",
+        """Convert the content of the uploaded image into meaningful text for use in a Q&A platform where user can seek answers from a knowledge base of thousands of corporate documents.
+        You must follow these rules:
+        - Detect if the image carry no information of interest:
+            + if the image is a simple shape (e.g.,. line, boxes,), simply return 'a shape' then terminate.
+            + if the image is a logo, simply return 'a logo' then terminate.
+            + No further processing needed. Simply terminate
+        - Otherwise, extract all informative facts from the image
+            + Preserve all details facts. Summarization is forbidden because it results in information loss.
+            + Use a clear, natural tone in paragraphs.
+            + Tables (if exists) must be convert to paragraphs.
+            + Preserve all numeric values and quantities related details in the final output.
+            + In the end, generate a list of up to 5 standalone questions. A standalone question is explicit, minimum reference language ('this', 'that', 'the'), and makes sense on itself without the need for additional contexts nor reference resolution.
+            + Output in the Markdown format
+        - Refrain from providing your own additional commentaries or thought process.""",
     )
 
     my_embedding_function = MyAzureOpenAIEmbeddings(
