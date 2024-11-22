@@ -21,6 +21,6 @@
 
 ./deploy.sh
 
-./uploads/*
+uploads/*
 
-./.deploy*sh
+deploy*sh
