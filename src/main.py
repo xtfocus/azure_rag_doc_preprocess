@@ -5,6 +5,7 @@ from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException,
                      UploadFile)
 from loguru import logger
 
+from src import task_counter
 from src.azure_container_client import AzureContainerClient
 from src.pipeline import MyFile
 from src.task_counter import TaskCounter
@@ -23,6 +24,7 @@ async def ensure_no_active_tasks():
     """
     Dependency that checks if there are any active background tasks.
     """
+
     if task_counter.is_busy:
         raise HTTPException(
             status_code=409,

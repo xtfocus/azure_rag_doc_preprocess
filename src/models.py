@@ -32,7 +32,7 @@ class BaseChunk(BaseModel):
 
     chunk_no: str
     chunk: str
-    page_range: PageRange
+    page_range: Optional[PageRange]
 
 
 class FileMetadata(BaseModel):

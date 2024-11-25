@@ -36,6 +36,16 @@ def get_vector_stores(config):
         field_name="chunk",
     )
 
+    summary_vector_store = MyAzureSearch(
+        azure_search_endpoint=config.AZURE_SEARCH_SERVICE_ENDPOINT,
+        azure_search_key=config.AZURE_SEARCH_ADMIN_KEY,
+        index_name=config.SUMMARY_INDEX_NAME,
+        embedding_function=my_embedding_function,
+        fields=fields,
+        vector_search=vector_search,
+        semantic_search=semantic_search,
+    )
+
     text_vector_store = MyAzureSearch(
         azure_search_endpoint=config.AZURE_SEARCH_SERVICE_ENDPOINT,
         azure_search_key=config.AZURE_SEARCH_ADMIN_KEY,
@@ -57,6 +67,7 @@ def get_vector_stores(config):
     )
 
     return {
+        "summary_vector_store": summary_vector_store,
         "text_vector_store": text_vector_store,
         "image_vector_store": image_vector_store,
     }

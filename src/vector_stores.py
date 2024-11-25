@@ -147,17 +147,6 @@ class MyAzureSearch:
             upload_success = await self.upload_documents(documents)
             return upload_success
 
-    # def search(self, search_text):
-    #     """Performs a search on the Azure Search index."""
-    #     if self.embedding_function:
-    #         # Generate embedding for the search query if an embedding function is provided
-    #         query_vector = self.embedding_function(search_text)
-    #         results = self.search_client.search(search_text="", vector=query_vector)
-    #     else:
-    #         results = self.search_client.search(search_text)
-    #
-    #     return [result for result in results]
-    #
     @staticmethod
     def create_texts_and_metadatas(
         chunks: BaseChunk, file_metadata: FileMetadata, prefix="text"

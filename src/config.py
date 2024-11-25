@@ -42,4 +42,5 @@ class ModelConfig:
 
     TEXT_INDEX_NAME = os.getenv("TEXT_INDEX_NAME", "my-text-index")
     IMAGE_INDEX_NAME = os.getenv("IMAGE_INDEX_NAME", "my-image-index")
+    SUMMARY_INDEX_NAME = os.getenv("SUMMARY_INDEX_NAME", "my-summary-index")
     IMAGE_CONTAINER_NAME = os.getenv("IMAGE_CONTAINER_NAME", "my-image-container")

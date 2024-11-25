@@ -1,6 +1,7 @@
 from openai import AsyncAzureOpenAI
 
 from src.azure_container_client import AzureContainerClient
+from src.file_summarizer import FileSummarizer
 from src.get_vector_stores import get_vector_stores
 from src.image_descriptor import ImageDescriptor
 from src.pipeline import Pipeline
@@ -14,7 +15,14 @@ def get_pipeline(
 
     vector_stores = get_vector_stores(config)
     image_vector_store = vector_stores["image_vector_store"]
+    summary_vector_store = vector_stores["summary_vector_store"]
     text_vector_store = vector_stores["text_vector_store"]
+
+    file_summarizer = FileSummarizer(
+        oai_client,
+        config,
+        """Following is sampled content from a document. Provide a brief summarization to introduce the content of the document within 10 sentences, preserving the main topics and aspects. Finally, provide 10 questions that this document may help answering.""",
+    )
 
     image_descriptor = ImageDescriptor(
         oai_client,
@@ -67,11 +75,13 @@ def get_pipeline(
     )
 
     pipeline = Pipeline(
-        text_vector_store,
-        image_vector_store,
-        my_embedding_function,
-        text_splitter,
-        image_descriptor,
-        image_container_client,
+        text_vector_store=text_vector_store,
+        image_vector_store=image_vector_store,
+        summary_vector_store=summary_vector_store,
+        embedding_function=my_embedding_function,
+        text_splitter=text_splitter,
+        image_descriptor=image_descriptor,
+        file_summarizer=file_summarizer,
+        image_container_client=image_container_client,
     )
     return pipeline

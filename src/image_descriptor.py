@@ -4,12 +4,19 @@ from openai import AsyncAzureOpenAI
 
 
 class ImageDescriptor:
+    """
+    Decribe an image
+    """
+
     def __init__(self, client: AsyncAzureOpenAI, config: Any, prompt: str):
         self.client = client
         self.config = config
         self.prompt = prompt
 
-    async def run(self, base64_data, temperature=None):
+    async def run(self, base64_data: str, temperature=None):
+        """
+        base64_data: base64 str
+        """
         if not temperature:
             temperature = self.config.temperature
 
