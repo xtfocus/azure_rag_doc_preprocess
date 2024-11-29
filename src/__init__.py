@@ -61,7 +61,7 @@ def create_app():
     env = Env()
 
     if not os.getenv("RUNNING_IN_PRODUCTION"):
-        env.read_env(".env.local")
+        env.read_env(".env.dev")
 
     app = fastapi.FastAPI(docs_url="/", lifespan=lifespan)
 

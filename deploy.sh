@@ -1,6 +1,8 @@
 
 #!/bin/bash
 
+# Deployment script to deploy the app to QAI resource
+
 # Function to display usage information
 usage() {
     echo "Usage: $0 {create|update} -e <env_file>"
@@ -51,14 +53,16 @@ case $action in
           --tags ProjectID=$PROJECT_ID ApplicationName=$PROJECT_ID OwnerService=$OWNERSERVICE PIC=$PIC \
           --env-vars $envs \
           --cpu $ALLOCATED_CPU --memory $ALLOCATED_MEMORY \
-          --min-replicas $MINREPLICAS --max-replicas $MAXREPLICAS
+          --min-replicas $MINREPLICAS --max-replicas $MAXREPLICAS \
+          --subscription $SUBSCRIPTION
+         
       
           echo "Container app created with name $API_NAME, in resource group $RESOURCE_GROUP, in container environment $CONTAINER_ENVIRONMENT, from registry $ACR_NAME"
           ;;
 
     update)
       
-      az containerapp update -n $API_NAME --resource-group $RESOURCE_GROUP --set-env-vars $envs
+      az containerapp update -n $API_NAME --resource-group $RESOURCE_GROUP --set-env-vars $envs --subscription $SUBSCRIPTION
       echo "Container app updated with name $API_NAME in resource group $RESOURCE_GROUP"
       ;;
 

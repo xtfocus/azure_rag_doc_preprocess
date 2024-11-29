@@ -6,10 +6,9 @@ import fitz
 import pytest
 
 from src.file_utils import (create_file_metadata_from_bytes,
-                            create_file_metadata_from_path, doc_contains_text,
+                            create_file_metadata_from_path,
                             extract_single_image, get_images_as_base64,
-                            page_contains_text, page_extract_images,
-                            pdf_blob_to_pymupdf_doc)
+                            page_extract_images, pdf_blob_to_pymupdf_doc)
 
 
 # Fixture for test files directory
@@ -54,30 +53,6 @@ def empty_pdf_path(test_files_dir):
         doc.save(str(pdf_path))
         doc.close()
     return pdf_path
-
-
-def test_page_contains_text(text_pdf_path, empty_pdf_path):
-    # Test with text PDF
-    doc_with_text = fitz.open(str(text_pdf_path))
-    assert page_contains_text(doc_with_text[0]) is True
-    doc_with_text.close()
-
-    # Test with empty PDF
-    doc_empty = fitz.open(str(empty_pdf_path))
-    assert page_contains_text(doc_empty[0]) is False
-    doc_empty.close()
-
-
-def test_doc_contains_text(text_pdf_path, empty_pdf_path):
-    # Test with text PDF
-    doc_with_text = fitz.open(str(text_pdf_path))
-    assert doc_contains_text(doc_with_text) is True
-    doc_with_text.close()
-
-    # Test with empty PDF
-    doc_empty = fitz.open(str(empty_pdf_path))
-    assert doc_contains_text(doc_empty) is False
-    doc_empty.close()
 
 
 def test_pdf_blob_to_pymupdf_doc(text_pdf_path):

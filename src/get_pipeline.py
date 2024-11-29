@@ -27,18 +27,19 @@ def get_pipeline(
     image_descriptor = ImageDescriptor(
         oai_client,
         config,
-        """Convert the content of the uploaded image into meaningful text for use in a Q&A platform where user can seek answers from a knowledge base of thousands of corporate documents.
+        """Convert the content of the uploaded image into a detailed and meaningful text for use in a Q&A platform where user can seek answers from a knowledge base of thousands of corporate documents.
         You must follow these rules:
         - Detect if the image carry no information of interest:
             + if the image is a simple shape (e.g.,. line, boxes,), simply return 'a shape' then terminate.
             + if the image is a logo, simply return 'a logo' then terminate.
             + No further processing needed. Simply terminate
-        - Otherwise, extract all informative facts from the image
+        - Otherwise, extract all informative facts from the image 
+            + Output in Japanese
             + Preserve all details facts. Summarization is forbidden because it results in information loss.
             + Use a clear, natural tone in paragraphs.
-            + Tables (if exists) must be convert to paragraphs.
+            + Tables (if exists) must be convert to meaningful paragraphs, where each cell value must be described using a sentence.
             + Preserve all numeric values and quantities related details in the final output.
-            + In the end, generate a list of up to 5 standalone questions. A standalone question is explicit, minimum reference language ('this', 'that', 'the'), and makes sense on itself without the need for additional contexts nor reference resolution.
+            + In the end, generate a list of up to 10 standalone questions (using a mix of English or Japanese). A standalone question is explicit, minimum reference language ('this', 'that', 'the'), and makes sense on itself without the need for additional contexts nor reference resolution.
             + Output in the Markdown format
         - Refrain from providing your own additional commentaries or thought process.""",
     )
