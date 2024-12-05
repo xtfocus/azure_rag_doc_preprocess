@@ -20,12 +20,12 @@ build:
 	docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
 
 push: build
-	docker tag $(DOCKER_IMAGE):$(DOCKER_TAG) $(DEV_ACR_NAME).azurecr.io/$(DEV_ACR_NAME):$(DEV_API_VERSION)
-	docker push $(DEV_ACR_NAME).azurecr.io/$(DEV_ACR_NAME):$(DEV_API_VERSION)
+	docker tag $(DOCKER_IMAGE):$(DOCKER_TAG) $(DEV_ACR_NAME).azurecr.io/$(DEV_IMAGE_NAME):$(DEV_API_VERSION)
+	docker push $(DEV_ACR_NAME).azurecr.io/$(DEV_IMAGE_NAME):$(DEV_API_VERSION)
 
 push-prod: build
-	docker tag $(DOCKER_IMAGE):$(DOCKER_TAG) $(PROD_ACR_NAME).azurecr.io/$(PROD_ACR_NAME):$(PROD_API_VERSION)
-	docker push $(PROD_ACR_NAME).azurecr.io/$(PROD_ACR_NAME):$(PROD_API_VERSION)
+	docker tag $(DOCKER_IMAGE):$(DOCKER_TAG) $(PROD_ACR_NAME).azurecr.io/$(PROD_IMAGE_NAME):$(PROD_API_VERSION)
+	docker push $(PROD_ACR_NAME).azurecr.io/$(PROD_IMAGE_NAME):$(PROD_API_VERSION)
 
 deploy-create: push
 	./deploy.sh create -e $(DEV_ENV_FILE)

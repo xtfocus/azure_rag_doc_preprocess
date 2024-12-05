@@ -47,6 +47,7 @@ def get_fields(azure_openai_embedding_dimensions: int):
             name="title",
             type=SearchFieldDataType.String,
             searchable=True,
+            filterable=True,
         ),
         # Additional field for filtering on document source
         SimpleField(

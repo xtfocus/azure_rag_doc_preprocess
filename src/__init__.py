@@ -2,6 +2,8 @@ import contextlib
 import os
 
 import fastapi
+from azure.core.credentials import AzureKeyCredential
+from azure.search.documents import SearchClient
 from azure.storage.blob import BlobServiceClient
 from environs import Env
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,6 +25,8 @@ async def lifespan(app: fastapi.FastAPI):
 
     config = configs["app_config"]
 
+    credential = AzureKeyCredential(config.AZURE_SEARCH_ADMIN_KEY)
+
     clients["chat-completion-model"] = AsyncAzureOpenAI(
         api_key=config.AZURE_OPENAI_API_KEY,
         api_version=config.AZURE_OPENAI_API_VERSION,
@@ -35,17 +39,36 @@ async def lifespan(app: fastapi.FastAPI):
         config.AZURE_STORAGE_CONNECTION_STRING
     )
 
+    # SEARCH AND STORAGE RESOURCE NEEDED TO FIND AND DELETE OLD RECORDS
     clients["image_container_client"] = AzureContainerClient(
         client=clients["blob_service_client"],
         container_name=config.IMAGE_CONTAINER_NAME,
     )
+    # azure ai search clients
+    clients["text-azure-ai-search"] = SearchClient(
+        config.AZURE_SEARCH_SERVICE_ENDPOINT,
+        config.TEXT_INDEX_NAME,
+        credential=credential,
+    )
+    clients["image-azure-ai-search"] = SearchClient(
+        config.AZURE_SEARCH_SERVICE_ENDPOINT,
+        config.IMAGE_INDEX_NAME,
+        credential=credential,
+    )
+    clients["summary-azure-ai-search"] = SearchClient(
+        config.AZURE_SEARCH_SERVICE_ENDPOINT,
+        config.SUMMARY_INDEX_NAME,
+        credential=credential,
+    )
 
+    # PIPELINE object
     objects["pipeline"] = get_pipeline(
         configs["app_config"],
         clients["chat-completion-model"],
         clients["image_container_client"],
     )
 
+    # DUPLICATE CHEKER to avoid handling a processed file
     objects["duplicate-checker"] = DuplicateChecker(
         client=clients["blob_service_client"],
         container_name="known-files-container",
@@ -55,6 +78,8 @@ async def lifespan(app: fastapi.FastAPI):
 
     clients["blob_service_client"].close()
     await clients["chat-completion-model"].close()
+    clients["text-azure-ai-search"].close()
+    clients["image-azure-ai-search"].close()
 
 
 def create_app():

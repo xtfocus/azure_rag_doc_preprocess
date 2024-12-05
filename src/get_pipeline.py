@@ -21,27 +21,83 @@ def get_pipeline(
     file_summarizer = FileSummarizer(
         oai_client,
         config,
-        """Following is sampled content from a document. Provide a brief summarization to introduce the content of the document within 10 sentences, preserving the main topics and aspects. Finally, provide 10 questions that this document may help answering.""",
+        """
+        Task: Document Summary
+        Instruction: 
+            Identify key information:
+                - Document Type and Purpose:
+                     Identify the type of document (e.g., report, agreement, article) and its main purpose.
+                - Key Entities:
+                     Mention any organizations, companies, or individuals prominently involved.
+                - Location and Context:
+                     Include relevant locations or settings if applicable.
+                - Main Topics:
+                     Highlight the primary topics or issues addressed in the document.
+                - Timeframe:
+                     Note any specific dates or time periods covered by the document.
+                - Important Details:
+                     Summarize key points, findings, or conclusions.
+                - Legal or Compliance Aspects:
+                     If applicable, mention any legal, compliance, or regulatory elements.
+                - Purpose and Implications:
+                     Explain the broader implications or intended outcomes of the document.
+
+            By following these steps, the summary will capture the essential elements needed for accurate retrieval.
+            
+        Task 2: Generate 10 QA pairs based on information in the document
+        Instruction: We desire Specific questions with specific details are preferred because they give the full context
+            Examples of generic questions (undesirable):
+                'What was the rate of change according to the agreement?' (undesirable because it uses `the agreement` instead of giving the full context)
+                'How many people were involved?' (involved in what, for what? This is too generic)
+                'What was the limit for extending work hours under this document (undesitable because it mentions some document without giving the whole context)
+            Examples of specific questions (desirable):
+                'What was the growth rate of interest rate in 6th month according to the loan agreement by Techcombank for priority customers?' (Very specific which documentation is being referred to, full context achieved)
+                'How many researchers from Stanford University participated in the climate change study conducted in Arctic regions between 2020-2022?'
+                'What was the limit for extending work hours according to Nike Vietnam factory regulation in 2023?'
+            Follow this pattern to create Specific questions that incorporate the specific who, what, where, when, and why from the document. Avoid Generic questions.
+
+        Following is sampled content from a document. Provide a summarization and 10 QA pairs as instructed.
+        """,
     )
 
     image_descriptor = ImageDescriptor(
         oai_client,
         config,
-        """Convert the content of the uploaded image into a detailed and meaningful text for use in a Q&A platform where user can seek answers from a knowledge base of thousands of corporate documents.
-        You must follow these rules:
-        - Detect if the image carry no information of interest:
-            + if the image is a simple shape (e.g.,. line, boxes,), simply return 'a shape' then terminate.
-            + if the image is a logo, simply return 'a logo' then terminate.
-            + No further processing needed. Simply terminate
-        - Otherwise, extract all informative facts from the image 
-            + Output in Japanese
-            + Preserve all details facts. Summarization is forbidden because it results in information loss.
-            + Use a clear, natural tone in paragraphs.
-            + Tables (if exists) must be convert to meaningful paragraphs, where each cell value must be described using a sentence.
-            + Preserve all numeric values and quantities related details in the final output.
-            + In the end, generate a list of up to 10 standalone questions (using a mix of English or Japanese). A standalone question is explicit, minimum reference language ('this', 'that', 'the'), and makes sense on itself without the need for additional contexts nor reference resolution.
-            + Output in the Markdown format
-        - Refrain from providing your own additional commentaries or thought process.""",
+        """Task: Image-to-Text Conversion
+        
+        Objective: Transform the provided image of a document into text form without information loss.
+        
+        Instructions:
+        
+            Detect if the image carry no information of interest:
+              + if the image is a simple shape (e.g.,. line, boxes,), simply return 'a shape' then terminate.
+              + if the image is a logo, simply return 'a logo' then terminate.
+              + No further processing needed. Simply terminate
+            Otherwise:
+                Examine the Image: Carefully look at the document to identify sections, headings, and any structured information.
+                Transcribe the Text: Write down all the text from the image as accurately as possible. Pay attention to details like numbers, dates, and specific terms. If tables exists, transcribe them in valid Markdown tables (consistent column count between headers and data)
+                Identify Key Elements:
+                    Note the name of the organization or company involved.
+                    Highlight every specific terms, conditions, or numerical data.
+                    Pay attention to dates, names, and signatures that might indicate the document’s purpose or validity period.
+                Review for Accuracy: Double-check your transcription for any errors or omissions to ensure completeness.
+                Submit Your Work: Provide the transcribed text in a clear and organized format.
+                By completing this task, you will help capture the detailed content and context of the document.
+        """,
+        # """Transform the content of the uploaded image into a detailed and meaningful text for Q&A purpose.
+        # You must follow these rules:
+        # - Detect if the image carry no information of interest:
+        #     + if the image is a simple shape (e.g.,. line, boxes,), simply return 'a shape' then terminate.
+        #     + if the image is a logo, simply return 'a logo' then terminate.
+        #     + No further processing needed. Simply terminate
+        # - Otherwise, transform the image to text
+        #     + Output in Japanese, Markdown format
+        #     + Use a clear, natural tone.
+        #     + Tables (if exists) must be convert to meaningful paragraphs
+        #     + Preserve all numeric values and quantities in the final output. Explain their meaning.
+        #     + In the end, generate a list of 10 QA pairs with explicit scoping.
+        #     + Be specific. Summarization is forbidden because it results in information loss.
+        # - Refrain from providing your own additional commentaries or thought process.""",
     )
 
     my_embedding_function = MyAzureOpenAIEmbeddings(

@@ -72,6 +72,35 @@ class BaseAzureContainerClient(ABC):
             logger.error(f"Error downloading blob '{blob_name}': {e}")
             return None
 
+    # Add this method to BaseAzureContainerClient class
+    def delete_file(self, blob_name: str) -> bool:
+        """
+        Delete a file from the container.
+
+        Args:
+            blob_name (str): The name of the blob to delete.
+
+        Returns:
+            bool: True if deletion was successful, False otherwise.
+        """
+        try:
+            container_client: ContainerClient = self.client.get_container_client(
+                self.container_name
+            )
+            blob_client: BlobClient = container_client.get_blob_client(blob_name)
+
+            if blob_client.exists():
+                blob_client.delete_blob()
+                logger.info(f"Successfully deleted blob {blob_name}")
+                return True
+            else:
+                logger.warning(f"Blob {blob_name} does not exist")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error deleting blob '{blob_name}': {e}")
+            return False
+
 
 class AzureContainerClient(BaseAzureContainerClient):
     """

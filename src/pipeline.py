@@ -175,7 +175,9 @@ class Pipeline:
 
         # Start file summary generation early since it's I/O bound
         summary_task = asyncio.create_task(
-            self._create_and_add_file_summaries(texts, images, file_metadata)
+            self._create_and_add_file_summaries(
+                [i.text for i in texts], images, file_metadata
+            )
         )
         #
         # Create tasks for concurrent processing
