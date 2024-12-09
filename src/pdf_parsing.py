@@ -81,7 +81,9 @@ def extract_texts_and_images(
             img_base64 = base64.b64encode(img_data).decode()  # Convert to Base64
             images.append(
                 FileImage(
-                    page_no=page_no, image_no=len(images), image_base64=img_base64
+                    page_no=page_no,
+                    image_no=len(images),  # Increase the number of images by one
+                    image_base64=img_base64,
                 )
             )
         else:

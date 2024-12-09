@@ -13,7 +13,7 @@ class ImageDescriptor:
         self.config = config
         self.prompt = prompt
 
-    async def run(self, base64_data: str, temperature=None):
+    async def run(self, base64_data: str, summary: str, temperature=None):
         """
         base64_data: base64 str
         """
@@ -36,6 +36,10 @@ class ImageDescriptor:
                             "image_url": {
                                 "url": f"data:image/jpeg;base64,{base64_data}"
                             },
+                        },
+                        {
+                            "type": "text",
+                            "text": f"For context, the image above is extracted from  a document having description as follows: {summary}",
                         },
                     ],
                 }

@@ -28,7 +28,7 @@ def get_pipeline(
                 - Document Type and Purpose:
                      Identify the type of document (e.g., report, agreement, article) and its main purpose.
                 - Entities:
-                    List all entities prominently mentioned in this document: humans, groups, companies, facilities, departments, location, etc.
+                    List all entities prominently mentioned in this document: organizations (groups, companies, facilities, departments, etc.), people, location etc.
                 - Location and Context:
                      Include relevant locations or settings if applicable.
                 - Main Topics:

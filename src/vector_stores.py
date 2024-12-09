@@ -149,7 +149,7 @@ class MyAzureSearch:
 
     @staticmethod
     def create_texts_and_metadatas(
-        chunks: BaseChunk, file_metadata: FileMetadata, prefix="text"
+        chunks: List[BaseChunk], file_metadata: FileMetadata, prefix="text"
     ):
         """
         Given BaseChunk and Parent file metadata, prepare texts and metadata to

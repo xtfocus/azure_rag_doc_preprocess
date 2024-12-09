@@ -1,5 +1,6 @@
 import asyncio
 import os
+from collections.abc import Iterable
 from typing import Any, Callable, List
 
 from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException,
@@ -280,6 +281,21 @@ async def process_blob(
         return {"blob_name": blob_name, "error": error}
 
 
+async def search_client_filter_file(file_name: str, search_client) -> Iterable:
+    """ """
+    # Get file name without extension for title matching
+    title = os.path.splitext(file_name)[0]
+    filter_expr = f"title eq '{title}'"
+    search_results = await asyncio.to_thread(
+        search_client.search,
+        search_text="*",  # Get all documents
+        filter=filter_expr,  # Exact match using OData filter
+        select=["chunk_id", "chunk", "metadata"],  # Only get chunk_ids for efficiency
+    )
+
+    return list(search_results)
+
+
 async def remove_file(
     file_name: str, search_client, use_parent_id: bool = False
 ) -> dict:
@@ -454,3 +470,35 @@ async def remove_file_endpoint(
         "client_results": results,
         "deleted_image_files": {"count": len(deleted_blobs), "files": deleted_blobs},
     }
+
+
+@router.get("/api/exec/get_file_entries/")
+async def run_retrieve_by_file_name(file_name: str):
+    tasks = {}
+    # Define clients
+    for client_name in [
+        "text-azure-ai-search",
+        "image-azure-ai-search",
+        "summary-azure-ai-search",
+    ]:
+
+        logger.debug(f"Starting task for client: {client_name}")
+
+        tasks[client_name] = asyncio.create_task(
+            search_client_filter_file(file_name, clients[client_name])
+        )
+
+    # return await tasks["summary-azure-ai-search"]
+    # Await all tasks and collect results
+    completed_results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+
+    # Create a result dictionary mapping client_name to task result
+    result = {
+        client_name: completed_results[idx]
+        for idx, client_name in enumerate(tasks.keys())
+    }
+
+    for i, v in result.items():
+        logger.info(f"Client {i}: Found {len(v)} results")
+
+    return result
