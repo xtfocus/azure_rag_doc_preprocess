@@ -27,8 +27,8 @@ def get_pipeline(
             Identify key information:
                 - Document Type and Purpose:
                      Identify the type of document (e.g., report, agreement, article) and its main purpose.
-                - Key Entities:
-                     Mention any organizations, companies, or individuals prominently involved.
+                - Entities:
+                    List all entities prominently mentioned in this document: humans, groups, companies, facilities, departments, location, etc.
                 - Location and Context:
                      Include relevant locations or settings if applicable.
                 - Main Topics:

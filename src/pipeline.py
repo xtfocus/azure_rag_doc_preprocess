@@ -179,32 +179,31 @@ class Pipeline:
                 [i.text for i in texts], images, file_metadata
             )
         )
-        #
-        # Create tasks for concurrent processing
-        tasks = []
 
-        # Start image processing early if images exist (I/O bound)
         image_descriptions_task = None
-
-        if images:
-            image_descriptions_task = asyncio.create_task(self._process_images(images))
+        image_upload_task = None
+        text_task = None
 
         # Process texts (relatively quick)
         if texts:
-            tasks.append(self._create_and_add_text_chunks(texts, file_metadata))
+            text_task = asyncio.create_task(
+                self._create_and_add_text_chunks(texts, file_metadata)
+            )
 
         # Process images and upload them
         if images:
+            await summary_task
+            image_descriptions_task = asyncio.create_task(self._process_images(images))
+
             # Wait for image descriptions
             image_descriptions = await image_descriptions_task
 
             # Create and add image chunks
-
             image_result, image_metadatas = await self._create_and_add_image_chunks(
                 images, image_descriptions, file_metadata
             )
 
-            tasks.append(
+            image_upload_task = asyncio.create_task(
                 self.image_container_client.upload_base64_image_to_blob(
                     (i["chunk_id"] for i in image_metadatas),
                     (image.image_base64 for image in images),
@@ -212,8 +211,11 @@ class Pipeline:
             )
 
         # Wait for all remaining tasks and summary
-        await asyncio.gather(*tasks, summary_task)
-        # await asyncio.gather(*tasks)
+        await summary_task
+        if texts:
+            await asyncio.gather(text_task)
+        if images:
+            await asyncio.gather(image_upload_task)
 
         if images:
             logger.info(

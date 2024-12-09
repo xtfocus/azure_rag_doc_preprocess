@@ -6,7 +6,7 @@ Desc: handling I/O tasks with Blob Storage for a specfic container
 
 import base64
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import Iterable, List, Optional
 
 from azure.storage.blob import BlobClient, BlobServiceClient, ContainerClient
 from loguru import logger
@@ -135,7 +135,7 @@ class AzureContainerClient(BaseAzureContainerClient):
         ]
 
     async def upload_base64_image_to_blob(
-        self, blob_names: List[str], base64_images: List[str]
+        self, blob_names: Iterable[str], base64_images: Iterable[str]
     ):
         """
         Uploads a base64-encoded image to Azure Blob Storage.
