@@ -6,7 +6,7 @@ while maintaining page information
 import base64
 from typing import List, Optional, Tuple
 
-from fitz import Document, Matrix
+from fitz import Document, Matrix, Page
 from pydantic import BaseModel
 
 from src.file_utils import get_images_as_base64, page_extract_images
@@ -32,13 +32,43 @@ from typing import List, Tuple
 from loguru import logger
 
 
-def extract_texts_and_images(
-    doc: Document,
-    report=False,
-) -> Tuple[List[FileText], List[FileImage]]:
+def doc_is_ppt(doc: Document):
     """
-    Extract texts and images for each page and log a summary table in a 2x2 matrix format
+    Return True if pdf document is a PowerPoint export
     """
+    return ("PowerPoint" in doc.metadata["creator"]) or (
+        "PowerPoint" in doc.metadata["producer"]
+    )
+
+
+def extract_texts_and_images_from_ppt(doc: Document):
+    texts: List = []
+    images: List = []
+    # Matrix to track the counts
+    page_stats = {
+        "text_yes_image_yes": 0,  # Pages with both text and images
+        "text_yes_image_no": 0,  # Pages with text but no images
+        "text_no_image_yes": 0,  # Pages with images but no text
+        "text_no_image_no": 0,  # Pages with neither text nor images
+    }
+
+    for page_no, page in enumerate(doc):
+        pix = page.get_pixmap()
+        img_data = pix.tobytes("png")  # Get PNG bytes
+        img_base64 = base64.b64encode(img_data).decode()  # Convert to Base64
+        images.append(
+            FileImage(
+                page_no=page_no,
+                image_no=len(images),  # Increase the number of images by one
+                image_base64=img_base64,
+            )
+        )
+        page_stats["text_no_image_yes"] += 1
+
+    return texts, images, page_stats
+
+
+def extract_texts_and_images_from_any(doc: Document):
     texts: List = []
     images: List = []
     # Matrix to track the counts
@@ -64,16 +94,15 @@ def extract_texts_and_images(
             if is_multicolor
         ]
 
-        if report:
-            # Update the appropriate category in the matrix
-            if text and images_base64:
-                page_stats["text_yes_image_yes"] += 1
-            elif text:
-                page_stats["text_yes_image_no"] += 1
-            elif images_base64:
-                page_stats["text_no_image_yes"] += 1
-            else:
-                page_stats["text_no_image_no"] += 1
+        # Update the appropriate category in the matrix
+        if text and images_base64:
+            page_stats["text_yes_image_yes"] += 1
+        elif text:
+            page_stats["text_yes_image_no"] += 1
+        elif images_base64:
+            page_stats["text_no_image_yes"] += 1
+        else:
+            page_stats["text_no_image_no"] += 1
 
         if not bool(text):  # If no text detected, convert the whole page to an image
             pix = page.get_pixmap(matrix=Matrix(2, 2))  # 2x scaling for better quality
@@ -94,8 +123,25 @@ def extract_texts_and_images(
                     for i, image_base64 in enumerate(images_base64)
                 ]
 
+    return texts, images, page_stats
+
+
+def extract_texts_and_images(
+    doc: Document,
+    report=False,
+) -> Tuple[List[FileText], List[FileImage]]:
+    """
+    Extract texts and images for each page and log a summary table in a 2x2 matrix format
+    """
+
+    if doc_is_ppt(doc):
+        texts, images, page_stats = extract_texts_and_images_from_ppt(doc)
+    else:
+        texts, images, page_stats = extract_texts_and_images_from_any(doc)
+
     if report:
         # Log the summary as a markdown 2x2 matrix
+        logger.info(f"File metadata: {doc.metadata}")
         logger.info(
             "\n"
             "|                     | Images Yes         | Images No          |\n"

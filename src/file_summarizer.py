@@ -11,7 +11,7 @@ class FileSummarizer:
         self.client = client
         self.config = config
         self.prompt = prompt
-        self.max_samples = 5
+        self.max_samples = 5  # How many text and image items to sample (each)
 
     def _sample_items(self, items: List[str], max_samples: int) -> List[str]:
         """
@@ -20,7 +20,9 @@ class FileSummarizer:
         """
         if len(items) <= max_samples:
             return items
-        return random.sample(items, max_samples)
+        if len(items) == 0:
+            return items
+        return [items[0]] + random.sample(items[1:], (max_samples - 1))
 
     def _create_message_content(
         self, images: List[str], texts: List[str]

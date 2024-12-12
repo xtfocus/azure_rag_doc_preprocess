@@ -67,7 +67,7 @@ class Pipeline:
         self.image_container_client = image_container_client
 
     async def _process_images(
-        self, images: List[FileImage], summary, max_concurrent_requests: int = 5
+        self, images: List[FileImage], summary, max_concurrent_requests: int = 30
     ) -> List[str]:
         """Process multiple images concurrently with rate limiting using a semaphore."""
         semaphore = asyncio.Semaphore(max_concurrent_requests)
@@ -137,6 +137,7 @@ class Pipeline:
         """Combine creation and adding of image chunks"""
         if not images:
             return None
+
         image_texts, image_metadatas = self._create_image_chunks(
             images, descriptions, file_metadata
         )
@@ -208,6 +209,7 @@ class Pipeline:
             try:
                 if "summary" in tasks:
                     summary = await tasks["summary"]
+                    logger.info(f"Created summary for {file_name}")
                     tasks["summary_upload"] = asyncio.create_task(
                         self._add_file_summary_to_store(summary, file_metadata)
                     )
@@ -218,10 +220,12 @@ class Pipeline:
             # Process images if available
             if images:
                 try:
-                    descriptions = await self._process_images(
+                    descriptions: List[str] = await self._process_images(
                         images,
                         summary=summary,
                     )
+
+                    logger.info(f"Created image descriptions for {file_name}")
 
                     image_result, image_metadatas = (
                         await self._create_and_add_image_chunks(
@@ -229,12 +233,16 @@ class Pipeline:
                         )
                     )
 
+                    logger.info(f"Created image index for {file_name}")
+
                     tasks["image_upload"] = asyncio.create_task(
                         self.image_container_client.upload_base64_image_to_blob(
                             (i["chunk_id"] for i in image_metadatas),
                             (image.image_base64 for image in images),
                         )
                     )
+
+                    logger.info(f"Saved images in {file_name}")
                 except Exception as e:
                     logger.error(f"Image processing failed: {str(e)}")
                     errors.append(f"Image processing failed: {str(e)}")
