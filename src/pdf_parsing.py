@@ -41,6 +41,16 @@ def doc_is_ppt(doc: Document):
     )
 
 
+def page_to_base64(page: Page, format="png", scale=2) -> str:
+    """
+    Convert whole page to base64 image
+    """
+
+    return base64.b64encode(
+        page.get_pixmap(matrix=Matrix(scale, scale)).tobytes(format)
+    ).decode()
+
+
 def extract_texts_and_images_from_ppt(doc: Document):
     texts: List = []
     images: List = []
@@ -53,9 +63,7 @@ def extract_texts_and_images_from_ppt(doc: Document):
     }
 
     for page_no, page in enumerate(doc):
-        pix = page.get_pixmap()
-        img_data = pix.tobytes("png")  # Get PNG bytes
-        img_base64 = base64.b64encode(img_data).decode()  # Convert to Base64
+        img_base64 = page_to_base64(page, scale=1)
         images.append(
             FileImage(
                 page_no=page_no,
@@ -105,9 +113,7 @@ def extract_texts_and_images_from_any(doc: Document):
             page_stats["text_no_image_no"] += 1
 
         if not bool(text):  # If no text detected, convert the whole page to an image
-            pix = page.get_pixmap(matrix=Matrix(2, 2))  # 2x scaling for better quality
-            img_data = pix.tobytes("png")  # Get PNG bytes
-            img_base64 = base64.b64encode(img_data).decode()  # Convert to Base64
+            img_base64 = page_to_base64(page, scale=2)
             images.append(
                 FileImage(
                     page_no=page_no,
