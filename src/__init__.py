@@ -80,6 +80,7 @@ async def lifespan(app: fastapi.FastAPI):
     await clients["chat-completion-model"].close()
     clients["text-azure-ai-search"].close()
     clients["image-azure-ai-search"].close()
+    clients["summary-azure-ai-search"].close()
 
 
 def create_app():
