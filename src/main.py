@@ -453,10 +453,10 @@ async def remove_file_endpoint(
             total_removed += result["documents_removed"]
 
         except Exception as e:
-            logger.error(f"Error with client {client.index_name}: {str(e)}")
+            logger.error(f"Error with client {client._index_name}: {str(e)}")
             results.append(
                 {
-                    "client": client.index_name,
+                    "client": client._index_name,
                     "file_name": file_name,
                     "status": "error",
                     "error": str(e),
