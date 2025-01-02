@@ -11,3 +11,11 @@ Indexing:
 Retrieval (in my other repo):
 - [x] add image to selected context chunks
 - [x] file summary as the first retrieval round
+
+# Asynchronous processing with webhook notification
+
+- [x] Response right away
+- [x] Run background tasks
+- Notify when complete
+- Documents can be processed asynchronously
+
