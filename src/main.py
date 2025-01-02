@@ -1,17 +1,19 @@
 import asyncio
 import os
 from collections.abc import Iterable
+from datetime import datetime
 from typing import Any, Callable, List
 
 from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException,
                      UploadFile)
+from httpx import AsyncClient
 from loguru import logger
 
 from src import task_counter
 from src.azure_container_client import AzureContainerClient
 from src.file_utils import pdf_blob_to_pymupdf_doc
+from src.models import WebhookConfig
 from src.pipeline import MyFile
-from src.task_counter import TaskCounter
 
 from .globals import clients, objects
 
@@ -20,41 +22,37 @@ router = APIRouter()
 # Shared results store (use a more robust storage mechanism in production)
 background_results = {}
 
-task_counter = TaskCounter()
 
+async def send_webhook_notification(
+    webhook_config: WebhookConfig, processing_result: dict
+):
+    """Send webhook notification about completed processing"""
 
-async def ensure_no_active_tasks():
-    """
-    Dependency that checks if there are any active background tasks.
-    """
-
-    if task_counter.is_busy:
-        raise HTTPException(
-            status_code=409,
-            detail=f"There are {task_counter.active_tasks} background tasks still running. Please try again later.",
-        )
-    yield
-
-
-def run_with_task_counter(func: Callable[..., Any]) -> Callable[..., Any]:
-    """
-    Decorator to wrap a function with task counter increment and decrement logic.
-    """
-
-    async def wrapper(*args, **kwargs):
-        task_counter.increment()
+    async with AsyncClient() as client:
         try:
-            return await func(*args, **kwargs)
-        finally:
-            task_counter.decrement()
+            payload = {
+                "status": "completed",
+                "file_name": processing_result["file_name"],
+                "processing_details": {
+                    "num_pages": processing_result["result"]["num_pages"],
+                    "num_texts": processing_result["result"]["num_texts"],
+                    "num_images": processing_result["result"]["num_images"],
+                },
+                "timestamp": datetime.now().isoformat(),
+            }
 
-    return wrapper
+            if webhook_config.payload_template:
+                payload.update(webhook_config.payload_template)
+
+            response = await client.post(str(webhook_config.url), json=payload)
+            logger.info(f"Webhook notification sent: {response.status_code}")
+
+        except Exception as e:
+            logger.error(f"Failed to send webhook notification: {str(e)}")
 
 
 @router.post("/api/exec/uploads/")
-async def process_files(
-    files: List[UploadFile], _: None = Depends(ensure_no_active_tasks)
-):
+async def process_files(files: List[UploadFile]):
     """
     Process multiple uploaded files asynchronously.
 
@@ -69,7 +67,6 @@ async def process_files(
 
     objects["duplicate-checker"]._ensure_container_exists()
 
-    @run_with_task_counter
     async def process_single_file(file: UploadFile):
         try:
             if not objects["duplicate-checker"].duplicate_by_file_name(file.filename):
@@ -119,7 +116,6 @@ async def reindex_file(
     container_name: str,
     file_name: str,
     background_tasks: BackgroundTasks,
-    _: None = Depends(ensure_no_active_tasks),
 ):
     """
     Reindex a single file from a specified Azure Blob Storage container in the background.
@@ -150,7 +146,6 @@ async def reindex_file(
     }
 
 
-@run_with_task_counter
 async def reindex_file_background(
     container_name: str,
     file_name: str,
@@ -194,7 +189,6 @@ async def reindex_file_background(
 async def process_container(
     container_name: str,
     background_tasks: BackgroundTasks,
-    _: None = Depends(ensure_no_active_tasks),
 ):
     """
     Start processing all files in an Azure blob container in the background.
@@ -225,7 +219,6 @@ async def process_container(
     return {"message": f"Processing of container '{container_name}' started."}
 
 
-@run_with_task_counter
 async def process_all_blobs(
     container_name: str,
     blob_container_client,
@@ -245,7 +238,6 @@ async def process_all_blobs(
     logger.info(f"Processed all documents in {container_name}:\n {results}")
 
 
-@run_with_task_counter
 async def process_blob(
     blob_name: str,
     blob_container_client,
@@ -253,7 +245,6 @@ async def process_blob(
     duplicate_checker,
 ):
     try:
-        task_counter.increment()
         if not duplicate_checker.duplicate_by_file_name(blob_name):
 
             # Download file content asynchronously
@@ -267,7 +258,6 @@ async def process_blob(
 
             duplicate_checker.update(file_name=blob_name)
             duplicate_checker.save()
-            task_counter.decrement()
             return {"blob_name": blob_name, "result": result}
 
         else:
@@ -277,8 +267,6 @@ async def process_blob(
     except Exception as e:
         error = f"Error processing {blob_name}: {str(e)}"
         logger.error(f"Error processing blob '{blob_name}': {str(e)}")
-        task_counter.decrement()
-
         return {"blob_name": blob_name, "error": error}
 
 
@@ -380,7 +368,6 @@ async def remove_file(
 async def remove_file_endpoint(
     file_name: str,
     use_parent_id: bool = False,
-    _: None = Depends(ensure_no_active_tasks),
 ):
     """
     Remove all documents associated with a file from multiple Azure Search clients
