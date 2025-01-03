@@ -2,14 +2,13 @@ import asyncio
 import os
 from collections.abc import Iterable
 from datetime import datetime
-from typing import Any, Callable, List
+from typing import List
 
 from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException,
                      UploadFile)
 from httpx import AsyncClient
 from loguru import logger
 
-from src import task_counter
 from src.azure_container_client import AzureContainerClient
 from src.file_utils import pdf_blob_to_pymupdf_doc
 from src.models import WebhookConfig
