@@ -1,17 +1,13 @@
 import asyncio
 import os
 from collections.abc import Iterable
-from datetime import datetime
 from typing import List
 
-from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException,
-                     UploadFile)
-from httpx import AsyncClient
+from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile
 from loguru import logger
 
 from src.azure_container_client import AzureContainerClient
 from src.file_utils import pdf_blob_to_pymupdf_doc
-from src.models import WebhookConfig
 from src.pipeline import MyFile
 
 from .globals import clients, objects
@@ -20,34 +16,6 @@ router = APIRouter()
 
 # Shared results store (use a more robust storage mechanism in production)
 background_results = {}
-
-
-async def send_webhook_notification(
-    webhook_config: WebhookConfig, processing_result: dict
-):
-    """Send webhook notification about completed processing"""
-
-    async with AsyncClient() as client:
-        try:
-            payload = {
-                "status": "completed",
-                "file_name": processing_result["file_name"],
-                "processing_details": {
-                    "num_pages": processing_result["result"]["num_pages"],
-                    "num_texts": processing_result["result"]["num_texts"],
-                    "num_images": processing_result["result"]["num_images"],
-                },
-                "timestamp": datetime.now().isoformat(),
-            }
-
-            if webhook_config.payload_template:
-                payload.update(webhook_config.payload_template)
-
-            response = await client.post(str(webhook_config.url), json=payload)
-            logger.info(f"Webhook notification sent: {response.status_code}")
-
-        except Exception as e:
-            logger.error(f"Failed to send webhook notification: {str(e)}")
 
 
 @router.post("/api/exec/uploads/")

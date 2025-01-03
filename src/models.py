@@ -3,12 +3,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 from loguru import logger
-from pydantic import BaseModel, Field, HttpUrl
-
-
-class WebhookConfig(BaseModel):
-    url: HttpUrl
-    payload_template: Optional[Dict[str, Any]] = None
+from pydantic import BaseModel, Field
 
 
 class CustomSkillException(Exception):
