@@ -1,8 +1,9 @@
 import asyncio
 import os
 from collections.abc import Iterable
-from typing import List
+from typing import Dict, List
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile
 from loguru import logger
 
@@ -17,65 +18,92 @@ router = APIRouter()
 # Shared results store (use a more robust storage mechanism in production)
 background_results = {}
 
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+
+
+async def send_webhook_notification(file_name: str, status: str, result: Dict = None):
+    """Send webhook notification about file processing status."""
+    if not WEBHOOK_URL:
+        logger.warning("WEBHOOK_URL not configured, skipping notification")
+        return
+
+    payload = {"file_name": file_name, "status": status, "result": result}
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(WEBHOOK_URL, json=payload)
+            response.raise_for_status()
+            logger.info(f"Webhook notification sent for {file_name}: {status}")
+    except Exception as e:
+        logger.error(f"Failed to send webhook notification for {file_name}: {str(e)}")
+
+
+async def process_file_background(file_name: str, file_content: bytes, pipeline):
+    """Background task to process a single file."""
+    try:
+        my_file = MyFile(file_name=file_name, file_content=file_content)
+
+        # Process the file using the pipeline
+        result = await pipeline.process_file(my_file)
+
+        # Send completion webhook
+        await send_webhook_notification(
+            file_name=file_name, status="completed", result=result
+        )
+
+        return {"file_name": file_name, "result": result}
+
+    except Exception as e:
+        error = f"Error processing file '{file_name}': {str(e)}"
+        await send_webhook_notification(
+            file_name=file_name, status="error", result={"error": str(e)}
+        )
+        logger.error(error)
+        return {"file_name": file_name, "error": str(e)}
+
 
 @router.post("/api/exec/uploads/")
-async def process_files(files: List[UploadFile]):
+async def process_files(files: List[UploadFile], background_tasks: BackgroundTasks):
     """
-    Process multiple uploaded files asynchronously.
+    Process multiple uploaded files asynchronously in the background.
 
     Args:
         files: List of uploaded files from the client.
+        background_tasks: FastAPI BackgroundTasks instance.
 
     Returns:
-        List of results for each processed file.
+        Dictionary confirming task initiation for each file.
     """
-
     pipeline = objects["pipeline"]
+    response = []
 
-    objects["duplicate-checker"]._ensure_container_exists()
-
-    async def process_single_file(file: UploadFile):
+    for file in files:
         try:
-            if not objects["duplicate-checker"].duplicate_by_file_name(file.filename):
-                # Read file content asynchronously
-                file_content = await file.read()
+            # Read file content asynchronously
+            file_content = await file.read()
+            # Send initial webhook notification
+            await send_webhook_notification(file_name=file.filename, status="received")
+            # Add background task for processing
+            background_tasks.add_task(
+                process_file_background, file.filename, file_content, pipeline
+            )
 
-                my_file = MyFile(file_name=file.filename, file_content=file_content)
-
-                # Process the file using the pipeline
-                result = await pipeline.process_file(my_file)
-                objects["duplicate-checker"].update(file_name=file.filename)
-
-                return {"file_name": file.filename, "result": result}
-            else:
-                raise ValueError(f"{file.filename} already processed. Skipping...")
+            response.append(
+                {"file_name": file.filename, "status": "processing_initiated"}
+            )
 
         except Exception as e:
-            # Raise HTTPException for any errors
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error processing file '{file.filename}': {str(e)}",
+            error = f"Error initiating processing for file '{file.filename}': {str(e)}"
+            logger.error(error)
+            response.append(
+                {
+                    "file_name": file.filename,
+                    "status": "initiation_failed",
+                    "error": str(e),
+                }
             )
 
-    # Create tasks for processing each file
-    tasks = [process_single_file(file) for file in files]
-
-    # Gather results for all tasks concurrently
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    # Handle results and exceptions
-    final_results = []
-    for index, result in enumerate(results):
-        if isinstance(result, Exception):
-            # Log or return the error for this file
-            final_results.append(
-                {"file_name": files[index].filename, "error": str(result)}
-            )
-        else:
-            final_results.append(result)
-
-    objects["duplicate-checker"].save()
-    return final_results
+    return {"tasks": response}
 
 
 @router.post("/api/exec/reindex/")
