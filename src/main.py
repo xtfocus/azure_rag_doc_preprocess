@@ -28,15 +28,15 @@ async def send_webhook_notification(
         return
 
     payload = {
-        "username": username,
-        "file_name": file_name,
+        "preferredUsername": username,
+        "blobName": file_name,
         "status": status,
-        "result": result,
+        "departmentId": 0,
     }
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(WEBHOOK_URL, json=payload)
+            response = await client.put(WEBHOOK_URL, json=payload)
             response.raise_for_status()
             logger.info(f"Webhook notification sent for {file_name}: {status}")
     except Exception as e:
