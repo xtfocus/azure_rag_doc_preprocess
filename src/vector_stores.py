@@ -1,5 +1,5 @@
 import json
-from typing import List
+from typing import Dict, List
 
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import ResourceNotFoundError
@@ -139,6 +139,7 @@ class MyAzureSearch:
                     "metadata": json.dumps(metadata["metadata"]),
                     "parent_id": metadata["parent_id"],
                     "title": metadata["title"],
+                    "uploader": metadata["uploader"],
                 }
                 documents.append(doc)
 
@@ -149,7 +150,7 @@ class MyAzureSearch:
 
     @staticmethod
     def create_texts_and_metadatas(
-        chunks: List[BaseChunk], file_metadata: FileMetadata, prefix="text"
+        chunks: List[BaseChunk], metadata: Dict, prefix="text"
     ):
         """
         Given BaseChunk and Parent file metadata, prepare texts and metadata to
@@ -159,10 +160,11 @@ class MyAzureSearch:
         texts = [chunk.chunk for chunk in chunks]
         metadatas = [
             {
-                "chunk_id": f"{prefix}_{file_metadata['file_hash']}_{chunk.chunk_no}",
+                "chunk_id": f"{prefix}_{metadata['file_hash']}_{chunk.chunk_no}",
                 "metadata": json.dumps({"page_range": chunk.page_range.dict()}),
-                "title": file_metadata["title"],
-                "parent_id": file_metadata["file_hash"],
+                "title": metadata["title"],
+                "parent_id": metadata["file_hash"],
+                "uploader": metadata["uploader"],
             }
             for chunk in chunks
         ]

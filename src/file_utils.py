@@ -2,9 +2,30 @@ import base64
 import hashlib
 import io
 import os
+import re
 from typing import List
 
 import fitz  # PyMuPDF
+
+
+def clean_string(input_string: str) -> str:
+    """
+    Cleans a string to only contain letters, digits, underscore (_),
+    dash (-), or equal sign (=). Replaces all other characters with a dash (-).
+
+    :param input_string: The input string to clean.
+    :return: A cleaned string with only allowed characters.
+    """
+    return re.sub(r"[^a-zA-Z0-9_\-=]", "-", input_string)
+
+
+def page_find_tables_md(page: fitz.Page):
+    tables = []
+    tabs = page.find_tables()
+    if tabs.tables:
+        for t in tabs.tables:
+            tables.append(t.to_markdown())
+    return tables
 
 
 def pdf_blob_to_pymupdf_doc(blob: bytes) -> fitz.Document:
@@ -108,7 +129,9 @@ def create_file_metadata_from_path(file_path):
     return {"title": title, "file": file_name, "file_hash": file_hash}
 
 
-def create_file_metadata_from_bytes(file_bytes: bytes, file_name: str, title=None):
+def create_file_metadata_from_bytes(
+    file_bytes: bytes, file_name: str, title=None, uploader: str = "default"
+):
     """
     Create metadata for a document file using the file contents in bytes.
 
@@ -127,6 +150,11 @@ def create_file_metadata_from_bytes(file_bytes: bytes, file_name: str, title=Non
     # Calculate SHA-256 hash to uniquely identify the file
     sha256_hash = hashlib.sha256()
     sha256_hash.update(file_bytes)
-    file_hash = sha256_hash.hexdigest()
+    file_hash = f"{clean_string(uploader)}_{sha256_hash.hexdigest()}"
 
-    return {"title": title, "file": file_name, "file_hash": file_hash}
+    return {
+        "title": title,
+        "file": file_name,
+        "file_hash": file_hash,
+        "uploader": uploader,
+    }

@@ -18,6 +18,7 @@ from src.vector_stores import MyAzureSearch
 class MyFile(BaseModel):
     file_name: str
     file_content: bytes
+    uploader: str = "default"
 
 
 class ProcessingResult(NamedTuple):
@@ -179,13 +180,14 @@ class Pipeline:
         """Process a single file through the pipeline with optimized concurrent operations"""
 
         errors = []
-        file_name = file.file_name
         try:
             # Convert PDF to document
             with pdf_blob_to_pymupdf_doc(file.file_content) as doc:
                 # Create file metadata
                 file_metadata = create_file_metadata_from_bytes(
-                    file_bytes=file.file_content, file_name=file.file_name
+                    file_bytes=file.file_content,
+                    file_name=file.file_name,
+                    uploader=file.uploader,
                 )
                 num_pages = len(doc)
                 texts, images = extract_texts_and_images(doc, report=True)
@@ -209,7 +211,7 @@ class Pipeline:
             try:
                 if "summary" in tasks:
                     summary = await tasks["summary"]
-                    logger.info(f"Created summary for {file_name}")
+                    logger.info(f"Created summary for {file.file_name}")
                     tasks["summary_upload"] = asyncio.create_task(
                         self._add_file_summary_to_store(summary, file_metadata)
                     )
@@ -225,7 +227,7 @@ class Pipeline:
                         summary=summary,
                     )
 
-                    logger.info(f"Created image descriptions for {file_name}")
+                    logger.info(f"Created image descriptions for {file.file_name}")
 
                     image_result, image_metadatas = (
                         await self._create_and_add_image_chunks(
@@ -233,7 +235,7 @@ class Pipeline:
                         )
                     )
 
-                    logger.info(f"Created image index for {file_name}")
+                    logger.info(f"Created image index for {file.file_name}")
 
                     tasks["image_upload"] = asyncio.create_task(
                         self.image_container_client.upload_base64_image_to_blob(
@@ -242,7 +244,7 @@ class Pipeline:
                         )
                     )
 
-                    logger.info(f"Saved images in {file_name}")
+                    logger.info(f"Saved images in {file.file_name}")
                 except Exception as e:
                     logger.error(f"Image processing failed: {str(e)}")
                     errors.append(f"Image processing failed: {str(e)}")
@@ -254,10 +256,10 @@ class Pipeline:
                 logger.error(f"Task completion error: {str(e)}")
                 errors.append(f"Task completion error: {str(e)}")
 
-            logger.info(f"Processed file {file_name}")
+            logger.info(f"Processed file {file.file_name}")
 
             return ProcessingResult(
-                file_name=file_name,
+                file_name=file.file_name,
                 num_pages=num_pages,
                 num_texts=len(texts),
                 num_images=len(images),
@@ -265,9 +267,9 @@ class Pipeline:
                 errors=errors if errors else None,
             )
         except Exception as e:
-            logger.error(f"Fatal error processing {file_name}: {str(e)}")
+            logger.error(f"Fatal error processing {file.file_name}: {str(e)}")
             return ProcessingResult(
-                file_name=file_name,
+                file_name=file.file_name,
                 num_pages=0,
                 num_texts=0,
                 num_images=0,

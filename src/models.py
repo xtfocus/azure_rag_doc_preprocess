@@ -32,7 +32,7 @@ class BaseChunk(BaseModel):
 
     chunk_no: str
     chunk: str
-    page_range: Optional[PageRange]
+    page_range: PageRange
 
 
 class FileMetadata(BaseModel):
@@ -42,6 +42,7 @@ class FileMetadata(BaseModel):
     title: str
     created_at: datetime = Field(default_factory=datetime.now)
     additional_metadata: Dict[str, Any] = Field(default_factory=dict)
+    uploader: str
 
 
 class AzureSearchDoc(BaseModel):
@@ -55,6 +56,7 @@ class AzureSearchDoc(BaseModel):
     metadata: str = Field(description="JSON serialized metadata")
     parent_id: str = Field(description="ID of the parent document")
     title: str = Field(description="Title of the document")
+    uploader: str = Field(description="Uploader of the document")
 
     @classmethod
     def from_chunk(
@@ -73,4 +75,11 @@ class AzureSearchDoc(BaseModel):
             metadata=json.dumps({"page_range": chunk.page_range.dict()}),
             parent_id=file_metadata.file_hash,
             title=file_metadata.title,
+            uploader=file_metadata.uploader,
         )
+
+
+class UserUploadRequest(BaseModel):
+    username: str = "default"
+    blob_name: str
+    container_name: str
