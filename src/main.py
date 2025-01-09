@@ -39,9 +39,10 @@ async def send_webhook_notification(
     try:
         async with httpx.AsyncClient() as client:
             response = await client.put(WEBHOOK_URL, json=payload)
+            logger.debug(response)
             response.raise_for_status()
     except Exception as e:
-        logger.error(f"Failed to send webhook notification for {file_name}: {str(e)}")
+        logger.error(f"Failed to send webhook notification for {file_name}: {str(e)}\n")
 
 
 async def process_user_file_background(
