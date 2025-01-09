@@ -113,6 +113,8 @@ def get_pipeline(
         chunk_overlap=200,
         length_function=len,
         separators=[
+            "```",
+            "```md\n",
             "\n\n",  # Paragraph boundaries
             ".\n",  # English sentence end with newline
             ". ",  # English sentence end with space

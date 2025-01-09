@@ -7,6 +7,16 @@ from typing import List
 import fitz  # PyMuPDF
 
 
+def page_extract_tables_md(page: fitz.Page) -> List[str]:
+    tables = []
+    tabs = page.find_tables()
+    if tabs.tables:
+        for t in tabs.tables:
+            table_string = f"```md\n{t.to_markdown()}```"
+            tables.append(table_string)
+    return tables
+
+
 def pdf_blob_to_pymupdf_doc(blob: bytes) -> fitz.Document:
     """
     Converts a PDF byte blob into a PyMuPDF Document object.
