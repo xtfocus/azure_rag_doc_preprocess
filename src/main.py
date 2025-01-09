@@ -34,11 +34,12 @@ async def send_webhook_notification(
         "departmentId": 0,
     }
 
+    logger.info(f"Sending payload\n{payload}")
+
     try:
         async with httpx.AsyncClient() as client:
             response = await client.put(WEBHOOK_URL, json=payload)
             response.raise_for_status()
-            logger.info(f"Webhook notification sent for {file_name}: {status}")
     except Exception as e:
         logger.error(f"Failed to send webhook notification for {file_name}: {str(e)}")
 
@@ -57,7 +58,7 @@ async def process_user_file_background(
 
         # Send completion webhook
         await send_webhook_notification(
-            username=username, file_name=file_name, status="completed", result=result
+            username=username, file_name=file_name, status="READY", result=result
         )
 
         return {"file_name": file_name, "result": result}
@@ -67,7 +68,7 @@ async def process_user_file_background(
         await send_webhook_notification(
             username=username,
             file_name=file_name,
-            status="error",
+            status="ERROR",
             result={"error": str(e)},
         )
         logger.error(error)
@@ -92,7 +93,7 @@ async def process_user_file(
     await send_webhook_notification(
         username=user_upload_request.username,
         file_name=user_upload_request.blob_name,
-        status="received",
+        status="IN_PROGRESS",
     )
 
     response = []
