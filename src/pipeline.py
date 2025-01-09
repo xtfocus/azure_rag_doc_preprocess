@@ -32,6 +32,47 @@ class ProcessingResult(NamedTuple):
     errors: Optional[List[str]] = None
 
 
+class ProcessingError(Exception):
+    """
+    Custom exception to represent errors during file processing.
+
+    Attributes:
+        file_name (str): The name of the file that caused the error.
+        num_pages (int): The number of pages processed (default is 0).
+        num_texts (int): The number of text chunks processed (default is 0).
+        num_images (int): The number of images processed (default is 0).
+        metadata (dict): Additional metadata related to the file (default is empty).
+        errors (list): List of error messages (default is an empty list).
+    """
+
+    def __init__(
+        self,
+        file_name,
+        num_pages=0,
+        num_texts=0,
+        num_images=0,
+        metadata=None,
+        errors=None,
+    ):
+        self.file_name = file_name
+        self.num_pages = num_pages
+        self.num_texts = num_texts
+        self.num_images = num_images
+        self.metadata = metadata or {}
+        self.errors = errors or []
+        super().__init__(self.format_error())
+
+    def format_error(self):
+        """
+        Format the error message for the exception.
+        """
+        return (
+            f"ProcessingError in file '{self.file_name}': "
+            f"pages={self.num_pages}, texts={self.num_texts}, images={self.num_images}. "
+            f"Metadata: {self.metadata}. Errors: {self.errors}"
+        )
+
+
 class Pipeline:
     """
     Orchestrating the extracting > chunking > embedding > indexing using Azure resources
@@ -179,7 +220,6 @@ class Pipeline:
     async def process_file(self, file: MyFile) -> ProcessingResult:
         """Process a single file through the pipeline with optimized concurrent operations"""
 
-        errors = []
         try:
             # Convert PDF to document
             with pdf_blob_to_pymupdf_doc(file.file_content) as doc:
@@ -217,7 +257,8 @@ class Pipeline:
                     )
             except Exception as e:
                 logger.error(f"Summary generation failed: {str(e)}")
-                errors.append(f"Summary generation failed: {str(e)}")
+                raise
+                # errors.append(f"Summary generation failed: {str(e)}")
 
             # Process images if available
             if images:
@@ -247,14 +288,16 @@ class Pipeline:
                     logger.info(f"Saved images in {file.file_name}")
                 except Exception as e:
                     logger.error(f"Image processing failed: {str(e)}")
-                    errors.append(f"Image processing failed: {str(e)}")
+                    raise
+                    # errors.append(f"Image processing failed: {str(e)}")
 
             # Wait for all remaining tasks to complete
             try:
                 await asyncio.gather(*tasks.values())
             except Exception as e:
                 logger.error(f"Task completion error: {str(e)}")
-                errors.append(f"Task completion error: {str(e)}")
+                raise
+                # errors.append(f"Task completion error: {str(e)}")
 
             logger.info(f"Processed file {file.file_name}")
 
@@ -264,11 +307,10 @@ class Pipeline:
                 num_texts=len(texts),
                 num_images=len(images),
                 metadata=file_metadata,
-                errors=errors if errors else None,
             )
         except Exception as e:
             logger.error(f"Fatal error processing {file.file_name}: {str(e)}")
-            return ProcessingResult(
+            raise ProcessingError(
                 file_name=file.file_name,
                 num_pages=0,
                 num_texts=0,
