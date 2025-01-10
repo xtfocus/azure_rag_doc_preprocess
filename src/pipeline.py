@@ -251,10 +251,10 @@ class Pipeline:
             try:
                 if "summary" in tasks:
                     summary = await tasks["summary"]
-                    logger.info(f"Created summary for {file.file_name}")
                     tasks["summary_upload"] = asyncio.create_task(
                         self._add_file_summary_to_store(summary, file_metadata)
                     )
+                    logger.info(f"Created summary for {file.file_name}")
             except Exception as e:
                 logger.error(f"Summary generation failed: {str(e)}")
                 raise

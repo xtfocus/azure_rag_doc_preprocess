@@ -80,6 +80,12 @@ class AzureSearchDoc(BaseModel):
 
 
 class UserUploadRequest(BaseModel):
-    username: str = "default"
+    username: str
+    blob_name: str
+    container_name: str
+
+
+class UserRemoveRequest(BaseModel):
+    username: str
     blob_name: str
     container_name: str
