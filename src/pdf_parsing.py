@@ -4,10 +4,11 @@ while maintaining page information
 """
 
 import base64
+import io
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from fitz import Document, Matrix, Page
+import pdfplumber
 from loguru import logger
 from pydantic import BaseModel
 
@@ -60,63 +61,67 @@ class PageStats:
         logger.info(f"File metadata: {doc_metadata}")
         logger.info(
             "\n"
-            "|                     | Has Images         | No Images          |\n"
-            "|---------------------|--------------------|--------------------|\n"
+            "|                    | Has Images         | No Images          |\n"
+            "|--------------------|--------------------|--------------------|\n"
             f"| **Has Text**       | {self.text_yes_image_yes:>18} | {self.text_yes_image_no:>18} |\n"
             f"| **No Text**        | {self.text_no_image_yes:>18} | {self.text_no_image_no:>18} |"
         )
 
 
-def doc_is_ppt(doc: Document) -> bool:
+def doc_is_ppt(pdf: pdfplumber.PDF) -> bool:
     """Return True if pdf document is a PowerPoint export"""
+    metadata = pdf.metadata
     return any(
-        "PowerPoint" in doc.metadata.get(field, "") for field in ["creator", "producer"]
+        "PowerPoint" in metadata.get(field, "") for field in ["Creator", "Producer"]
     )
 
 
-def page_to_base64(page: Page, format: str = "png", scale: int = 2) -> str:
+def page_to_base64(
+    page: pdfplumber.page.Page, format: str = "PNG", scale: int = 2
+) -> str:
     """Convert whole page to base64 image"""
-    return base64.b64encode(
-        page.get_pixmap(matrix=Matrix(scale, scale)).tobytes(format)
-    ).decode()
+    # Convert page to image using pdfplumber's native method
+    img = page.to_image(resolution=72 * scale)
 
+    # Get the image as bytes
+    img_buffer = io.BytesIO()
+    img.original.save(img_buffer, format=format)
 
-def is_drawing_not_visible(item: dict) -> bool:
-    """Determine if an item is not visible based on its attributes"""
-    no_fill = item.get("fill") is None or item.get("fill_opacity", 1.0) == 0.0
-    no_stroke = (
-        item.get("color") is None
-        or item.get("stroke_opacity", 1.0) == 0.0
-        or item.get("width", 1.0) <= 0
-    )
-    return no_fill and no_stroke
+    return base64.b64encode(img_buffer.getvalue()).decode()
 
 
 def get_page_drawings_stats(
-    page: Page, get_invisible_elements: bool = True
+    page: pdfplumber.page.Page, get_invisible_elements: bool = True
 ) -> Dict[str, int]:
     """Count drawings by type: curve, line, quad, rectangle"""
     stats = dict()
-    for drawing in page.get_drawings():
-        if not get_invisible_elements and is_drawing_not_visible(drawing):
-            continue
-        for item in drawing["items"]:
-            stats[item[0]] = stats.get(item[0], 0) + 1
+
+    # Get curves
+    curves = page.curves
+    lines = page.lines
+    rects = page.rects
+
+    for curve in curves:
+        stats["c"] = stats.get("c", 0) + 1
+
+    for line in lines:
+        stats["l"] = stats.get("l", 0) + 1
+
+    for rect in rects:
+        stats["re"] = stats.get("re", 0) + 1
+
     return stats
 
 
-def is_infographic_page(page: Page) -> bool:
+def is_infographic_page(page: pdfplumber.page.Page) -> bool:
     """Check if page contains multiple visual components"""
     stats = get_page_drawings_stats(page, get_invisible_elements=False)
-
     n_elements = sum(v for k, v in stats.items() if k != "re")
-
-    # If the number of lines + curves + quads exceeds this threshold, we flag the whole page as an image
     return n_elements >= 9
 
 
 def process_page_as_an_image(
-    page: Page, page_no: int, stats: PageStats
+    page: pdfplumber.page.Page, page_no: int, stats: PageStats
 ) -> Tuple[List[FileText], List[FileImage]]:
     """Process a page like the whole page is an image"""
     page_image = FileImage(
@@ -127,7 +132,7 @@ def process_page_as_an_image(
 
 
 def process_regular_page(
-    page: Page, page_no: int, stats: PageStats
+    page: pdfplumber.page.Page, page_no: int, stats: PageStats
 ) -> Tuple[List[FileText], List[FileImage]]:
     """Process regular PDF page with text and images"""
     if is_infographic_page(page):
@@ -136,18 +141,10 @@ def process_regular_page(
         )
         return process_page_as_an_image(page, page_no, stats)
 
-    text = page.get_text()
-    tables: str = "\n\n".join(page_extract_tables_md(page))
+    text = page.extract_text()
+    tables = "\n\n".join(page_extract_tables_md(page))
     text += tables
     images_base64 = get_images_as_base64(page)
-
-    # Filter multicolor images
-    images_pixmap = page_extract_images(page)
-    images_base64 = [
-        img
-        for img, pixmap in zip(images_base64, images_pixmap)
-        if not pixmap.is_unicolor
-    ]
 
     if not text:
         logger.info(
@@ -167,7 +164,7 @@ def process_regular_page(
 
 
 def extract_texts_and_images(
-    doc: Document, report: bool = False
+    doc: pdfplumber.PDF, report: bool = False
 ) -> Tuple[List[FileText], List[FileImage]]:
     """Extract texts and images from PDF document"""
     stats = PageStats()
@@ -176,7 +173,7 @@ def extract_texts_and_images(
 
     process_fn = process_page_as_an_image if doc_is_ppt(doc) else process_regular_page
 
-    for page_no, page in enumerate(doc):
+    for page_no, page in enumerate(doc.pages):
         texts, images = process_fn(page, page_no, stats)
         all_texts.extend(texts)
         all_images.extend(images)

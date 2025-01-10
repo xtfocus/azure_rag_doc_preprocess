@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from src.azure_container_client import AzureContainerClient
 from src.file_summarizer import FileSummarizer
 from src.file_utils import (create_file_metadata_from_bytes,
-                            pdf_blob_to_pymupdf_doc)
+                            pdf_blob_to_pdfplumber_doc)
 from src.image_descriptor import ImageDescriptor
 from src.models import BaseChunk, PageRange
 from src.pdf_parsing import FileImage, extract_texts_and_images
@@ -182,7 +182,7 @@ class Pipeline:
         file_name = file.file_name
         try:
             # Convert PDF to document
-            with pdf_blob_to_pymupdf_doc(file.file_content) as doc:
+            with pdf_blob_to_pdfplumber_doc(file.file_content) as doc:
                 # Create file metadata
                 file_metadata = create_file_metadata_from_bytes(
                     file_bytes=file.file_content, file_name=file.file_name

@@ -9,7 +9,7 @@ from loguru import logger
 
 from src import task_counter
 from src.azure_container_client import AzureContainerClient
-from src.file_utils import pdf_blob_to_pymupdf_doc
+from src.file_utils import pdf_blob_to_pdfplumber_doc
 from src.pipeline import MyFile
 from src.task_counter import TaskCounter
 
@@ -516,4 +516,4 @@ async def get_file_metadata(container_name: str, file_name: str):
     file_content = await asyncio.to_thread(
         blob_container_client.download_file, file_name
     )
-    return pdf_blob_to_pymupdf_doc(file_content).metadata
+    return pdf_blob_to_pdfplumber_doc(file_content).metadata
