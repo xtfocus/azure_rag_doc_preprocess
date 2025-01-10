@@ -11,7 +11,8 @@ from fitz import Document, Matrix, Page
 from loguru import logger
 from pydantic import BaseModel
 
-from src.file_utils import get_images_as_base64, page_extract_images
+from src.file_utils import (get_images_as_base64, page_extract_images,
+                            page_extract_tables_md)
 
 
 class FileText(BaseModel):
@@ -136,6 +137,8 @@ def process_regular_page(
         return process_page_as_an_image(page, page_no, stats)
 
     text = page.get_text()
+    tables: str = "\n\n".join(page_extract_tables_md(page))
+    text += tables
     images_base64 = get_images_as_base64(page)
 
     # Filter multicolor images
