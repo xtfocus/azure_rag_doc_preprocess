@@ -12,7 +12,7 @@ def page_extract_tables_md(page: fitz.Page) -> List[str]:
     tabs = page.find_tables()
     if tabs.tables:
         for t in tabs.tables:
-            table_string = f"```md\n{t.to_markdown()}```"
+            table_string = f"```Markdown\n{t.to_markdown()}```"
             tables.append(table_string)
     return tables
 

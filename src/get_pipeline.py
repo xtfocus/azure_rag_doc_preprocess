@@ -114,7 +114,7 @@ def get_pipeline(
         length_function=len,
         separators=[
             "```",
-            "```md\n",
+            "```Markdown\n",
             "\n\n",  # Paragraph boundaries
             ".\n",  # English sentence end with newline
             ". ",  # English sentence end with space
