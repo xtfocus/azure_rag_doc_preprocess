@@ -12,8 +12,7 @@ import pdfplumber
 from loguru import logger
 from pydantic import BaseModel
 
-from src.file_utils import (get_images_as_base64, page_extract_images,
-                            page_extract_tables_md)
+from src.file_utils import get_images_as_base64, page_extract_tables_md
 
 
 class FileText(BaseModel):

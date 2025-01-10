@@ -2,11 +2,9 @@ import base64
 import hashlib
 import io
 import os
-from typing import List, Optional
+from typing import List
 
 import pdfplumber
-from pdfplumber.page import Page
-from PIL import Image
 
 
 def page_extract_tables_md(
@@ -91,7 +89,7 @@ def page_extract_tables_md(
             )
             markdown.append(data_row)
 
-        markdown_tables.append("\n".join(markdown))
+        markdown_tables.append("```Markdown" + "\n".join(markdown) + "```")
 
     return markdown_tables
 
@@ -109,77 +107,38 @@ def pdf_blob_to_pdfplumber_doc(blob: bytes) -> pdfplumber.PDF:
     return pdfplumber.open(io.BytesIO(blob))
 
 
-def extract_single_image(page: Page, image_obj: dict) -> Optional[Image.Image]:
+def get_images_as_base64(page: pdfplumber.page.Page) -> List[str]:
     """
-    Extracts a single image from the page given its image object.
-    Converts it to RGB format if necessary and returns a PIL Image.
-    Args:
-        page (pdfplumber.page.Page): The page containing the image
-        image_obj (dict): The image object dictionary from pdfplumber
-    Returns:
-        Optional[PIL.Image.Image]: A PIL Image object of the extracted image, or None if extraction fails
-    """
-    try:
-        # Get raw image data
-        raw_image = image_obj["stream"].get_data()
+    Converts all images on a given page to base64-encoded strings with high quality.
 
-        # Create PIL Image from bytes
-        img = Image.open(io.BytesIO(raw_image))
-
-        # Convert to RGB if necessary
-        if img.mode in ["RGBA", "LA"]:
-            background = Image.new("RGB", img.size, (255, 255, 255))
-            background.paste(img, mask=img.split()[-1])
-            img = background
-        elif img.mode not in ["RGB"]:
-            img = img.convert("RGB")
-
-        return img
-    except Exception as e:
-        logger.warning(f"Failed to extract image: {str(e)}")
-        return None
-
-
-def page_extract_images(page: Page) -> List[Image.Image]:
-    """
-    Extracts all images on a given page as PIL Image objects.
     Args:
         page (pdfplumber.page.Page): A single page of a pdfplumber document.
+
     Returns:
-        List[PIL.Image.Image]: A list of PIL Image objects for each image on the page.
+        List[str]: A list of base64-encoded strings, each representing a high-quality image on the page.
     """
-    images = []
+    base64_images = []
+    for image in page.images:
+        # Extract the bounding box of the image
+        bbox = (image["x0"], image["top"], image["x1"], image["bottom"])
 
-    # Extract images from the page
-    for img_obj in page.images:
-        pil_image = extract_single_image(page, img_obj)
-        if pil_image is not None:
-            images.append(pil_image)
+        # Crop the image from the page
+        cropped_page = page.within_bbox(bbox)
+        if cropped_page:
+            # Render a high-quality rasterized version of the cropped page
+            pil_image = cropped_page.to_image(
+                resolution=250
+            ).original  # Use high resolution
 
-    return images
+            # Save as PNG into a BytesIO buffer for lossless compression
+            buffer = io.BytesIO()
+            pil_image.save(buffer, format="PNG")
 
+            # Encode the image to base64
+            base64_image = base64.b64encode(buffer.getvalue()).decode("utf-8")
+            base64_images.append(base64_image)
 
-def get_images_as_base64(page: Page) -> List[str]:
-    """
-    Converts all images on a given page to base64-encoded strings.
-    Args:
-        page (pdfplumber.page.Page): A single page of a pdfplumber document.
-    Returns:
-        List[str]: A list of base64-encoded strings, each representing an image on the page.
-    """
-    images_base64 = []
-    images = page_extract_images(page)
-
-    for img in images:
-        # Convert PIL Image to PNG format in-memory
-        img_buffer = io.BytesIO()
-        img.save(img_buffer, format="PNG")
-
-        # Encode PNG binary data as base64 string
-        img_base64 = base64.b64encode(img_buffer.getvalue()).decode("utf-8")
-        images_base64.append(img_base64)
-
-    return images_base64
+    return base64_images
 
 
 def create_file_metadata_from_path(file_path):
