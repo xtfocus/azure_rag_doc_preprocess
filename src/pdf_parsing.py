@@ -8,11 +8,12 @@ import io
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-import pdfplumber
 from loguru import logger
+from pdfplumber.page import Page
+from pdfplumber.pdf import PDF as Doc
 from pydantic import BaseModel
 
-from src.file_utils import get_images_as_base64, page_extract_tables_md
+from src.pdf_utils import get_images_as_base64, page_extract_tables_md
 
 
 class FileText(BaseModel):
@@ -67,7 +68,7 @@ class PageStats:
         )
 
 
-def doc_is_ppt(pdf: pdfplumber.PDF) -> bool:
+def doc_is_ppt(pdf: Doc) -> bool:
     """Return True if pdf document is a PowerPoint export"""
     metadata = pdf.metadata
     return any(
@@ -75,9 +76,7 @@ def doc_is_ppt(pdf: pdfplumber.PDF) -> bool:
     )
 
 
-def page_to_base64(
-    page: pdfplumber.page.Page, format: str = "PNG", scale: int = 2
-) -> str:
+def page_to_base64(page: Page, format: str = "PNG", scale: int = 2) -> str:
     """Convert whole page to base64 image"""
     # Convert page to image using pdfplumber's native method
     img = page.to_image(resolution=72 * scale)
@@ -89,38 +88,30 @@ def page_to_base64(
     return base64.b64encode(img_buffer.getvalue()).decode()
 
 
-def get_page_drawings_stats(
-    page: pdfplumber.page.Page, get_invisible_elements: bool = True
-) -> Dict[str, int]:
+def get_page_drawings_stats(page: Page) -> Dict[str, int]:
     """Count drawings by type: curve, line, quad, rectangle"""
-    stats = dict()
 
-    # Get curves
-    curves = page.curves
     lines = page.lines
-    rects = page.rects
-
-    for curve in curves:
-        stats["c"] = stats.get("c", 0) + 1
-
-    for line in lines:
-        stats["l"] = stats.get("l", 0) + 1
-
-    for rect in rects:
-        stats["re"] = stats.get("re", 0) + 1
-
-    return stats
+    hlines = [l for l in lines if l["y0"] == l["y1"]]
+    vlines = [l for l in lines if l["x0"] == l["x1"]]
+    return {
+        "c": len(page.curves),
+        "hl": len(hlines),
+        "vl": len(vlines),
+        "re": len(page.rects),
+    }
 
 
-def is_infographic_page(page: pdfplumber.page.Page) -> bool:
+def is_infographic_page(page: Page) -> bool:
     """Check if page contains multiple visual components"""
-    stats = get_page_drawings_stats(page, get_invisible_elements=False)
-    n_elements = sum(v for k, v in stats.items() if k != "re")
+    stats = get_page_drawings_stats(page)
+    n_elements = sum(v for k, v in stats.items() if k in ("vl", "c"))
+    n_elements += len(page.images)
     return n_elements >= 9
 
 
 def process_page_as_an_image(
-    page: pdfplumber.page.Page, page_no: int, stats: PageStats
+    page: Page, page_no: int, stats: PageStats
 ) -> Tuple[List[FileText], List[FileImage]]:
     """Process a page like the whole page is an image"""
     page_image = FileImage(
@@ -131,7 +122,7 @@ def process_page_as_an_image(
 
 
 def process_regular_page(
-    page: pdfplumber.page.Page, page_no: int, stats: PageStats
+    page: Page, page_no: int, stats: PageStats
 ) -> Tuple[List[FileText], List[FileImage]]:
     """Process regular PDF page with text and images"""
     if is_infographic_page(page):
@@ -146,10 +137,14 @@ def process_regular_page(
     images_base64 = get_images_as_base64(page)
 
     if not text:
-        logger.info(
-            f"Page {page_no} contains no text elements and will be treated as an image"
-        )
-        return process_page_as_an_image(page, page_no, stats)
+        if images_base64:
+            logger.info(
+                f"Page {page_no} contains no text elements and will be treated as an image"
+            )
+            return process_page_as_an_image(page, page_no, stats)
+        else:
+            logger.info(f"Page {page_no} contains no elements and will be skipped")
+            return [], []
 
     # Process text and images
     texts = [FileText(page_no=page_no, text=text)]
@@ -163,7 +158,7 @@ def process_regular_page(
 
 
 def extract_texts_and_images(
-    doc: pdfplumber.PDF, report: bool = False
+    doc: Doc, report: bool = False
 ) -> Tuple[List[FileText], List[FileImage]]:
     """Extract texts and images from PDF document"""
     stats = PageStats()

@@ -6,11 +6,11 @@ from pydantic import BaseModel
 
 from src.azure_container_client import AzureContainerClient
 from src.file_summarizer import FileSummarizer
-from src.file_utils import (create_file_metadata_from_bytes,
-                            pdf_blob_to_pdfplumber_doc)
+from src.file_utils import create_file_metadata_from_bytes
 from src.image_descriptor import ImageDescriptor
 from src.models import BaseChunk, PageRange
 from src.pdf_parsing import FileImage, extract_texts_and_images
+from src.pdf_utils import pdf_blob_to_pdfplumber_doc
 from src.splitters import SimplePageTextSplitter
 from src.vector_stores import MyAzureSearch
 

@@ -9,7 +9,7 @@ from loguru import logger
 
 from src import task_counter
 from src.azure_container_client import AzureContainerClient
-from src.file_utils import pdf_blob_to_pdfplumber_doc
+from src.pdf_utils import pdf_blob_to_pdfplumber_doc
 from src.pipeline import MyFile
 from src.task_counter import TaskCounter
 
