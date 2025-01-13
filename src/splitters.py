@@ -123,7 +123,7 @@ class SimplePageTextSplitter(BaseTextSplitter):
             while remaining_text:
                 # Update page range
                 current_page_range = (
-                    (current_page_range[0] - 1) if current_chunk else page_no,
+                    max(current_page_range[0] - 1, 0) if current_chunk else page_no,
                     page_no,
                 )
 
