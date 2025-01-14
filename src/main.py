@@ -7,8 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from loguru import logger
 
 from src.azure_container_client import AzureContainerClient
-from src.models import UserRemoveRequest, UserUploadRequest
-from src.pipeline import MyFile
+from src.models import MyFile, UserRemoveRequest, UserUploadRequest
 
 from .globals import clients, objects
 

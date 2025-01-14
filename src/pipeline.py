@@ -1,18 +1,16 @@
 import asyncio
-from logging import error
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
 
 from loguru import logger
-from pydantic import BaseModel
 
 from src.azure_container_client import AzureContainerClient
 from src.file_summarizer import FileSummarizer
 from src.image_descriptor import ImageDescriptor
-from src.models import BaseChunk, MyFileMetaData, PageRange
+from src.models import BaseChunk, MyFile, MyFileMetaData, PageRange
 from src.pdf_parsing import FileImage, extract_texts_and_images
 from src.pdf_utils import pdf_blob_to_pdfplumber_doc
 from src.splitters import SimplePageTextSplitter
-from src.upload_metadata import MyFile, create_file_upload_metadata
+from src.upload_metadata import create_file_upload_metadata
 from src.vector_stores import MyAzureSearch
 
 
