@@ -1,7 +1,7 @@
 import hashlib
 
 
-def create_file_metadata_from_bytes(file_bytes: bytes, file_name: str):
+def create_file_metadata_from_bytes(file_bytes: bytes, file_name: str) -> dict:
     """
     Create metadata for a document file using the file contents in bytes.
 

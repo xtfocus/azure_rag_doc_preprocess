@@ -1,4 +1,5 @@
 import asyncio
+from logging import error
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
 
 from loguru import logger
@@ -6,19 +7,13 @@ from pydantic import BaseModel
 
 from src.azure_container_client import AzureContainerClient
 from src.file_summarizer import FileSummarizer
-from src.file_utils import (create_file_metadata_from_bytes,
-                            pdf_blob_to_pymupdf_doc)
 from src.image_descriptor import ImageDescriptor
 from src.models import BaseChunk, PageRange
 from src.pdf_parsing import FileImage, extract_texts_and_images
+from src.pdf_utils import pdf_blob_to_pdfplumber_doc
 from src.splitters import SimplePageTextSplitter
+from src.upload_metadata import MyFile, create_file_upload_metadata
 from src.vector_stores import MyAzureSearch
-
-
-class MyFile(BaseModel):
-    file_name: str
-    file_content: bytes
-    uploader: str = "default"
 
 
 class ProcessingResult(NamedTuple):
@@ -220,16 +215,14 @@ class Pipeline:
     async def process_file(self, file: MyFile) -> ProcessingResult:
         """Process a single file through the pipeline with optimized concurrent operations"""
 
+        errors = []
         try:
             # Convert PDF to document
-            with pdf_blob_to_pymupdf_doc(file.file_content) as doc:
+            with pdf_blob_to_pdfplumber_doc(file.file_content) as doc:
                 # Create file metadata
-                file_metadata = create_file_metadata_from_bytes(
-                    file_bytes=file.file_content,
-                    file_name=file.file_name,
-                ).update(dict(uploader=file.uploader))
-
-                num_pages = len(doc)
+                file_metadata = create_file_upload_metadata(file)
+                logger.info(f"Created file upload metadata: {file_metadata}")
+                num_pages = len(doc.pages)
                 texts, images = extract_texts_and_images(doc, report=True)
                 logger.info("Extracted raw texts and images")
 
@@ -256,9 +249,9 @@ class Pipeline:
                     )
                     logger.info(f"Created summary for {file.file_name}")
             except Exception as e:
-                logger.error(f"Summary generation failed: {str(e)}")
-                raise
-                # errors.append(f"Summary generation failed: {str(e)}")
+                error_msg = f"Summary generation failed: {str(e)}"
+                logger.error(error_msg)
+                errors.append(error_msg)
 
             # Process images if available
             if images:
@@ -282,14 +275,15 @@ class Pipeline:
                         self.image_container_client.upload_base64_image_to_blob(
                             (i["chunk_id"] for i in image_metadatas),
                             (image.image_base64 for image in images),
+                            metadata=file_metadata,
                         )
                     )
 
                     logger.info(f"Saved images in {file.file_name}")
                 except Exception as e:
-                    logger.error(f"Image processing failed: {str(e)}")
-                    raise
-                    # errors.append(f"Image processing failed: {str(e)}")
+                    error_msg = f"Image Processing failed: {str(e)}"
+                    logger.error(error_msg)
+                    errors.append(error_msg)
 
             # Wait for all remaining tasks to complete
             try:
@@ -308,6 +302,7 @@ class Pipeline:
                 num_images=len(images),
                 metadata=file_metadata,
             )
+
         except Exception as e:
             logger.error(f"Fatal error processing {file.file_name}: {str(e)}")
             raise ProcessingError(

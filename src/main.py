@@ -1,14 +1,12 @@
 import asyncio
 import os
-from collections.abc import Iterable
-from typing import Dict, List
+from typing import Dict
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from loguru import logger
 
 from src.azure_container_client import AzureContainerClient
-from src.file_utils import pdf_blob_to_pymupdf_doc
 from src.models import UserRemoveRequest, UserUploadRequest
 from src.pipeline import MyFile
 
