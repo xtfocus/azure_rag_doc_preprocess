@@ -2,22 +2,16 @@ import asyncio
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
 
 from loguru import logger
-from pydantic import BaseModel
 
 from src.azure_container_client import AzureContainerClient
 from src.file_summarizer import FileSummarizer
 from src.file_utils import create_file_metadata_from_bytes
 from src.image_descriptor import ImageDescriptor
-from src.models import BaseChunk, PageRange
+from src.models import BaseChunk, MyFile, MyFileMetaData, PageRange
 from src.pdf_parsing import FileImage, extract_texts_and_images
 from src.pdf_utils import pdf_blob_to_pdfplumber_doc
 from src.splitters import SimplePageTextSplitter
 from src.vector_stores import MyAzureSearch
-
-
-class MyFile(BaseModel):
-    file_name: str
-    file_content: bytes
 
 
 class ProcessingResult(NamedTuple):
@@ -80,7 +74,7 @@ class Pipeline:
         return await asyncio.gather(*tasks)
 
     def _create_text_chunks(
-        self, texts: List[Any], file_metadata: Dict
+        self, texts: List[Any], file_metadata: MyFileMetaData
     ) -> Tuple[List[str], List[Dict]]:
         """Create text chunks and their metadata
 
@@ -97,7 +91,7 @@ class Pipeline:
         )
 
     def _create_image_chunks(
-        self, images: List[Any], descriptions: List[str], file_metadata: Dict
+        self, images: List[Any], descriptions: List[str], file_metadata: MyFileMetaData
     ) -> Tuple[List[str], List[Dict]]:
         """Create image chunks and their metadata
 
@@ -121,7 +115,9 @@ class Pipeline:
             image_chunks, file_metadata, prefix="image"
         )
 
-    async def _create_and_add_text_chunks(self, texts: List[Any], file_metadata: Dict):
+    async def _create_and_add_text_chunks(
+        self, texts: List[Any], file_metadata: MyFileMetaData
+    ):
         """Combine creation and adding of text chunks"""
         if not texts:
             return None
@@ -132,7 +128,7 @@ class Pipeline:
         )
 
     async def _create_and_add_image_chunks(
-        self, images: List[Any], descriptions: List[str], file_metadata: Dict
+        self, images: List[Any], descriptions: List[str], file_metadata: MyFileMetaData
     ):
         """Combine creation and adding of image chunks"""
         if not images:
