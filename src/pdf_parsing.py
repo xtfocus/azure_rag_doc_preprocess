@@ -157,9 +157,7 @@ def process_regular_page(
     return texts, images
 
 
-def extract_texts_and_images(
-    doc: Doc, report: bool = False
-) -> Tuple[List[FileText], List[FileImage]]:
+def extract_texts_and_images(doc: Doc, report: bool = False) -> Dict:
     """Extract texts and images from PDF document"""
     stats = PageStats()
     all_texts: List[FileText] = []
@@ -175,4 +173,4 @@ def extract_texts_and_images(
     if report:
         stats.log_summary(doc.metadata)
 
-    return all_texts, all_images
+    return {"texts": all_texts, "images": all_images}

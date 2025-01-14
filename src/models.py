@@ -46,7 +46,7 @@ class MyFileMetaData(BaseModel):
 
     file_hash: str
     title: str
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     uploader: str
 
 
@@ -70,7 +70,7 @@ class AzureSearchDocMetaData(BaseModel):
         """
         return cls(
             chunk_id=f"{prefix}_{file_metadata.file_hash}_chunk_{chunk.chunk_no}",
-            metadata=json.dumps({"page_range": chunk.page_range.dict()}),
+            metadata=json.dumps({"page_range": chunk.page_range.model_dump()}),
             parent_id=file_metadata.file_hash,
             title=file_metadata.title,
             uploader=file_metadata.uploader,

@@ -136,7 +136,7 @@ class MyAzureSearch:
                     "chunk": text or "no description",
                     "vector": embedding,
                 }
-                doc.update(metadata.dict())
+                doc.update(metadata.model_dump())
                 documents.append(doc)
 
         if documents:

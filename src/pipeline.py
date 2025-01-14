@@ -21,7 +21,7 @@ class ProcessingResult(NamedTuple):
     num_pages: int
     num_texts: int
     num_images: int
-    metadata: Dict[str, Any]
+    metadata: Any
     errors: Optional[List[str]] = None
 
 
@@ -170,7 +170,7 @@ class Pipeline:
 
     async def _create_and_add_image_chunks(
         self, images: List[Any], descriptions: List[str], file_metadata: MyFileMetaData
-    ):
+    ) -> Dict:
         """Combine creation and adding of image chunks"""
         if not images:
             return None
@@ -178,14 +178,14 @@ class Pipeline:
         image_texts, image_metadatas = self._create_image_chunks(
             images, descriptions, file_metadata
         )
-        return (
-            await self.image_vector_store.add_entries(
+        return {
+            "image_results": await self.image_vector_store.add_entries(
                 texts=image_texts,
                 metadatas=image_metadatas,
                 filter_by_min_len=10,
             ),
-            image_metadatas,
-        )
+            "image_metadatas": image_metadatas,
+        }
 
     async def _create_summary(self, texts: List[str], images: List[FileImage]) -> str:
         """Just create the summary"""
@@ -223,7 +223,8 @@ class Pipeline:
                 file_metadata: MyFileMetaData = create_file_upload_metadata(file)
                 logger.info(f"Created file upload metadata: {file_metadata}")
                 num_pages = len(doc.pages)
-                texts, images = extract_texts_and_images(doc, report=True)
+                extraction = extract_texts_and_images(doc, report=True)
+                texts, images = extraction["texts"], extraction["images"]
                 logger.info("Extracted raw texts and images")
 
             summary = ""
@@ -263,23 +264,24 @@ class Pipeline:
 
                     logger.info(f"Created image descriptions for {file.file_name}")
 
-                    image_result, image_metadatas = (
-                        await self._create_and_add_image_chunks(
-                            images, descriptions, file_metadata
-                        )
+                    image_processing_output = await self._create_and_add_image_chunks(
+                        images, descriptions, file_metadata
+                    )
+                    image_results, image_metadatas = (
+                        image_processing_output["image_results"],
+                        image_processing_output["image_metadatas"],
                     )
 
                     logger.info(f"Created image index for {file.file_name}")
 
                     tasks["image_upload"] = asyncio.create_task(
                         self.image_container_client.upload_base64_image_to_blob(
-                            (i["chunk_id"] for i in image_metadatas),
+                            (i.chunk_id for i in image_metadatas),
                             (image.image_base64 for image in images),
-                            metadata=file_metadata,
+                            metadata=file_metadata.model_dump(),
                         )
                     )
 
-                    logger.info(f"Saved images in {file.file_name}")
                 except Exception as e:
                     error_msg = f"Image Processing failed: {str(e)}"
                     logger.error(error_msg)
