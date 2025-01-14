@@ -227,8 +227,8 @@ class Pipeline:
                 file_metadata = create_file_metadata_from_bytes(
                     file_bytes=file.file_content,
                     file_name=file.file_name,
-                    uploader=file.uploader,
-                )
+                ).update(dict(uploader=file.uploader))
+
                 num_pages = len(doc)
                 texts, images = extract_texts_and_images(doc, report=True)
                 logger.info("Extracted raw texts and images")
