@@ -10,7 +10,7 @@ from azure.search.documents.indexes.models import (SearchIndex, SemanticSearch,
 from loguru import logger
 from openai import AzureOpenAI
 
-from src.models import BaseChunk, FileMetadata
+from src.models import AzureSearchDocMetaData, BaseChunk
 
 
 class MyAzureSearch:
@@ -91,10 +91,10 @@ class MyAzureSearch:
 
         return filtered_texts, filtered_metadatas
 
-    async def add_texts(
+    async def add_entries(
         self,
         texts: List[str],
-        metadatas=None,
+        metadatas=List[AzureSearchDocMetaData],
         batch_size: int = 10,
         filter_by_min_len: int = 0,
     ):
@@ -133,14 +133,10 @@ class MyAzureSearch:
                 filtered_texts, embeddings, filtered_metadatas
             ):
                 doc = {
-                    "chunk_id": metadata["chunk_id"],
                     "chunk": text or "no description",
                     "vector": embedding,
-                    "metadata": json.dumps(metadata["metadata"]),
-                    "parent_id": metadata["parent_id"],
-                    "title": metadata["title"],
-                    "uploader": metadata["uploader"],
                 }
+                doc.update(metadata.dict())
                 documents.append(doc)
 
         if documents:
@@ -154,18 +150,14 @@ class MyAzureSearch:
     ):
         """
         Given BaseChunk and Parent file metadata, prepare texts and metadata to
-        be used with `add_texts`
+        be used with `add_entries`
         """
         # Extract texts and metadata
         texts = [chunk.chunk for chunk in chunks]
         metadatas = [
-            {
-                "chunk_id": f"{prefix}_{metadata['file_hash']}_{chunk.chunk_no}",
-                "metadata": json.dumps({"page_range": chunk.page_range.dict()}),
-                "title": metadata["title"],
-                "parent_id": metadata["file_hash"],
-                "uploader": metadata["uploader"],
-            }
+            AzureSearchDocMetaData.from_chunk(
+                chunk, prefix=prefix, file_metadata=metadata
+            )
             for chunk in chunks
         ]
 

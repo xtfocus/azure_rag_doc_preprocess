@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from src.azure_container_client import AzureContainerClient
 from src.file_summarizer import FileSummarizer
 from src.image_descriptor import ImageDescriptor
-from src.models import BaseChunk, PageRange
+from src.models import BaseChunk, MyFileMetaData, PageRange
 from src.pdf_parsing import FileImage, extract_texts_and_images
 from src.pdf_utils import pdf_blob_to_pdfplumber_doc
 from src.splitters import SimplePageTextSplitter
@@ -158,18 +158,20 @@ class Pipeline:
             image_chunks, file_metadata, prefix="image"
         )
 
-    async def _create_and_add_text_chunks(self, texts: List[Any], file_metadata: Dict):
+    async def _create_and_add_text_chunks(
+        self, texts: List[Any], file_metadata: MyFileMetaData
+    ):
         """Combine creation and adding of text chunks"""
         if not texts:
             return None
 
         input_texts, input_metadatas = self._create_text_chunks(texts, file_metadata)
-        return await self.text_vector_store.add_texts(
+        return await self.text_vector_store.add_entries(
             texts=input_texts, metadatas=input_metadatas
         )
 
     async def _create_and_add_image_chunks(
-        self, images: List[Any], descriptions: List[str], file_metadata: Dict
+        self, images: List[Any], descriptions: List[str], file_metadata: MyFileMetaData
     ):
         """Combine creation and adding of image chunks"""
         if not images:
@@ -179,7 +181,7 @@ class Pipeline:
             images, descriptions, file_metadata
         )
         return (
-            await self.image_vector_store.add_texts(
+            await self.image_vector_store.add_entries(
                 texts=image_texts,
                 metadatas=image_metadatas,
                 filter_by_min_len=10,
@@ -208,7 +210,7 @@ class Pipeline:
             )
         )
 
-        return await self.summary_vector_store.add_texts(
+        return await self.summary_vector_store.add_entries(
             texts=summary_texts, metadatas=summary_metadatas
         )
 
@@ -220,7 +222,7 @@ class Pipeline:
             # Convert PDF to document
             with pdf_blob_to_pdfplumber_doc(file.file_content) as doc:
                 # Create file metadata
-                file_metadata = create_file_upload_metadata(file)
+                file_metadata: MyFileMetaData = create_file_upload_metadata(file)
                 logger.info(f"Created file upload metadata: {file_metadata}")
                 num_pages = len(doc.pages)
                 texts, images = extract_texts_and_images(doc, report=True)
