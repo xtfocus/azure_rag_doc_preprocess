@@ -156,6 +156,13 @@ class AzureContainerClient(BaseAzureContainerClient):
         container_client = self.client.get_container_client(self.container_name)
         logger.debug(metadata)
 
+        if metadata:
+
+            metadata = {
+                k: v.encode("utf-8").decode("utf-8") if isinstance(v, str) else v
+                for k, v in metadata.items()
+            }
+
         try:
             for blob_name, base64_image in zip(blob_names, base64_images):
                 # Decode the base64 image
@@ -169,7 +176,7 @@ class AzureContainerClient(BaseAzureContainerClient):
                     image_data,
                     overwrite=True,
                     content_type="image/png",
-                    metadata=metadata,
+                    # metadata=metadata,
                 )
         except Exception as e:
             logger.error(f"Upload images error {e}")
