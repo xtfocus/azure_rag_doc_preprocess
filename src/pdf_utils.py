@@ -106,10 +106,13 @@ def pdf_blob_to_pdfplumber_doc(blob: bytes) -> pdfplumber.PDF:
     return pdfplumber.open(io.BytesIO(blob))
 
 
-def insignificant_image(bbox):
+def insignificant_image(image_bbox: tuple):
+    """
+    If height or length of 'image' is smaller than 1, flagged as insignificant
+    """
     min_dimension = 1
     # Calculate width and height
-    x0, y0, x1, y1 = bbox
+    x0, y0, x1, y1 = image_bbox
     width, height = x1 - x0, y1 - y0
     # Filter out small images based on dimensions
     if width < min_dimension or height < min_dimension:
