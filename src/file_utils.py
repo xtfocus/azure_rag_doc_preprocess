@@ -1,12 +1,10 @@
 import hashlib
 import os
 
-from src.models import MyFileMetaData
-
 
 def create_file_metadata_from_bytes(
     file_bytes: bytes, file_name: str, title=None
-) -> MyFileMetaData:
+) -> dict:
     """
     Create metadata for a document file using the file contents in bytes.
 
@@ -27,6 +25,4 @@ def create_file_metadata_from_bytes(
     sha256_hash.update(file_bytes)
     file_hash = sha256_hash.hexdigest()
 
-    return MyFileMetaData.model_validate(
-        {"title": title, "file": file_name, "file_hash": file_hash}
-    )
+    return {"title": title, "file": file_name, "file_hash": file_hash}

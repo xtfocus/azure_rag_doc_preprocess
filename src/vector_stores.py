@@ -1,5 +1,5 @@
 import json
-from typing import List
+from typing import Dict, List
 
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import ResourceNotFoundError
@@ -10,7 +10,7 @@ from azure.search.documents.indexes.models import (SearchIndex, SemanticSearch,
 from loguru import logger
 from openai import AzureOpenAI
 
-from src.models import BaseChunk, FileMetadata
+from src.models import AzureSearchDocMetaData, BaseChunk, MyFileMetaData
 
 
 class MyAzureSearch:
@@ -91,10 +91,10 @@ class MyAzureSearch:
 
         return filtered_texts, filtered_metadatas
 
-    async def add_texts(
+    async def add_entries(
         self,
         texts: List[str],
-        metadatas=None,
+        metadatas=List[AzureSearchDocMetaData],
         batch_size: int = 10,
         filter_by_min_len: int = 0,
     ):
@@ -133,13 +133,10 @@ class MyAzureSearch:
                 filtered_texts, embeddings, filtered_metadatas
             ):
                 doc = {
-                    "chunk_id": metadata["chunk_id"],
                     "chunk": text or "no description",
                     "vector": embedding,
-                    "metadata": json.dumps(metadata["metadata"]),
-                    "parent_id": metadata["parent_id"],
-                    "title": metadata["title"],
                 }
+                doc.update(metadata.model_dump())
                 documents.append(doc)
 
         if documents:
@@ -149,25 +146,22 @@ class MyAzureSearch:
 
     @staticmethod
     def create_texts_and_metadatas(
-        chunks: List[BaseChunk], file_metadata: FileMetadata, prefix="text"
+        chunks: List[BaseChunk], metadata: MyFileMetaData, prefix="text"
     ):
         """
         Given BaseChunk and Parent file metadata, prepare texts and metadata to
-        be used with `add_texts`
+        be used with `add_entries`
         """
         # Extract texts and metadata
         texts = [chunk.chunk for chunk in chunks]
         metadatas = [
-            {
-                "chunk_id": f"{prefix}_{file_metadata['file_hash']}_{chunk.chunk_no}",
-                "metadata": json.dumps({"page_range": chunk.page_range.dict()}),
-                "title": file_metadata["title"],
-                "parent_id": file_metadata["file_hash"],
-            }
+            AzureSearchDocMetaData.from_chunk(
+                chunk, prefix=prefix, file_metadata=metadata
+            )
             for chunk in chunks
         ]
 
-        return texts, metadatas
+        return {"texts": texts, "metadatas": metadatas}
 
 
 class MyAzureOpenAIEmbeddings:

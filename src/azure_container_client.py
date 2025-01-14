@@ -5,8 +5,8 @@ Desc: handling I/O tasks with Blob Storage for a specfic container
 """
 
 import base64
-from abc import ABC, abstractmethod
-from typing import Iterable, List, Optional
+from abc import ABC
+from typing import Dict, Iterable, List, Optional
 
 from azure.storage.blob import BlobClient, BlobServiceClient, ContainerClient
 from loguru import logger
@@ -135,10 +135,13 @@ class AzureContainerClient(BaseAzureContainerClient):
         ]
 
     async def upload_base64_image_to_blob(
-        self, blob_names: Iterable[str], base64_images: Iterable[str]
+        self,
+        blob_names: Iterable[str],
+        base64_images: Iterable[str],
+        metadata: Optional[Dict[str, str]] = None,
     ):
         """
-        Uploads a base64-encoded image to Azure Blob Storage.
+        Uploads base64-encoded images to Azure Blob Storage.
 
         Args:
             connection_string (str): Connection string to Azure Blob Storage.
@@ -151,17 +154,25 @@ class AzureContainerClient(BaseAzureContainerClient):
         """
 
         container_client = self.client.get_container_client(self.container_name)
+        logger.debug(metadata)
 
-        for blob_name, base64_image in zip(blob_names, base64_images):
-            # Decode the base64 image
-            image_data = base64.b64decode(base64_image)
+        try:
+            for blob_name, base64_image in zip(blob_names, base64_images):
+                # Decode the base64 image
+                image_data = base64.b64decode(base64_image)
 
-            # Create a BlobClient
-            blob_client = container_client.get_blob_client(blob_name)
+                # Create a BlobClient
+                blob_client = container_client.get_blob_client(blob_name)
 
-            # Upload the image
-            blob_client.upload_blob(
-                image_data, overwrite=True, content_type="image/png"
-            )
+                # Upload the image
+                blob_client.upload_blob(
+                    image_data,
+                    overwrite=True,
+                    content_type="image/png",
+                    metadata=metadata,
+                )
+        except Exception as e:
+            logger.error(f"Upload images error {e}")
+            raise
 
         return

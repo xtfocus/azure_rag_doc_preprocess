@@ -15,5 +15,5 @@ def create_file_upload_metadata(file: MyFile) -> MyFileMetaData:
         file_bytes=file.file_content,
         file_name=file.file_name,
     )
-    file_metadata.update(dict(uploader=file.uploader))
+    file_metadata.update(dict(uploader=(file.uploader or "default")))
     return MyFileMetaData.model_validate(file_metadata)

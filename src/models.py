@@ -46,8 +46,8 @@ class MyFileMetaData(BaseModel):
 
     file_hash: str
     title: str
-    created_at: datetime = Field(default_factory=datetime.now)
-    uploader: str = "default"
+    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    uploader: str
 
 
 class AzureSearchDocMetaData(BaseModel):
@@ -59,7 +59,6 @@ class AzureSearchDocMetaData(BaseModel):
     metadata: str = Field(description="JSON serialized metadata")
     parent_id: str = Field(description="ID of the parent document")
     title: str = Field(description="Title of the document")
-    uploader: str = Field(description="Uploader of the document")
 
     @classmethod
     def from_chunk(
@@ -68,13 +67,15 @@ class AzureSearchDocMetaData(BaseModel):
         """
         Creates an AzureSearchDoc from a chunk and file metadata
         """
-        return cls(
-            chunk_id=f"{prefix}_{file_metadata.file_hash}_chunk_{chunk.chunk_no}",
-            metadata=json.dumps({"page_range": chunk.page_range.dict()}),
-            parent_id=file_metadata.file_hash,
-            title=file_metadata.title,
-            uploader=file_metadata.uploader,
-        )
+        try:
+            return cls(
+                chunk_id=f"{prefix}_{file_metadata.file_hash}_chunk_{chunk.chunk_no}",
+                metadata=json.dumps({"page_range": chunk.page_range.dict()}),
+                parent_id=file_metadata.file_hash,
+                title=file_metadata.title,
+            )
+        except Exception as e:
+            raise
 
 
 class UserUploadRequest(BaseModel):

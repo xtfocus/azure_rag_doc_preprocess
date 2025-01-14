@@ -1,16 +1,17 @@
 import asyncio
+from os import walk
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
 
 from loguru import logger
 
 from src.azure_container_client import AzureContainerClient
 from src.file_summarizer import FileSummarizer
-from src.file_utils import create_file_metadata_from_bytes
 from src.image_descriptor import ImageDescriptor
 from src.models import BaseChunk, MyFile, MyFileMetaData, PageRange
 from src.pdf_parsing import FileImage, extract_texts_and_images
 from src.pdf_utils import pdf_blob_to_pdfplumber_doc
 from src.splitters import SimplePageTextSplitter
+from src.upload_metadata import create_file_upload_metadata
 from src.vector_stores import MyAzureSearch
 
 
@@ -21,8 +22,49 @@ class ProcessingResult(NamedTuple):
     num_pages: int
     num_texts: int
     num_images: int
-    metadata: Dict[str, Any]
+    metadata: Any
     errors: Optional[List[str]] = None
+
+
+class ProcessingError(Exception):
+    """
+    Custom exception to represent errors during file processing.
+
+    Attributes:
+        file_name (str): The name of the file that caused the error.
+        num_pages (int): The number of pages processed (default is 0).
+        num_texts (int): The number of text chunks processed (default is 0).
+        num_images (int): The number of images processed (default is 0).
+        metadata (dict): Additional metadata related to the file (default is empty).
+        errors (list): List of error messages (default is an empty list).
+    """
+
+    def __init__(
+        self,
+        file_name,
+        num_pages=0,
+        num_texts=0,
+        num_images=0,
+        metadata=None,
+        errors=None,
+    ):
+        self.file_name = file_name
+        self.num_pages = num_pages
+        self.num_texts = num_texts
+        self.num_images = num_images
+        self.metadata = metadata or {}
+        self.errors = errors or []
+        super().__init__(self.format_error())
+
+    def format_error(self):
+        """
+        Format the error message for the exception.
+        """
+        return (
+            f"ProcessingError in file '{self.file_name}': "
+            f"pages={self.num_pages}, texts={self.num_texts}, images={self.num_images}. "
+            f"Metadata: {self.metadata}. Errors: {self.errors}"
+        )
 
 
 class Pipeline:
@@ -75,7 +117,7 @@ class Pipeline:
 
     def _create_text_chunks(
         self, texts: List[Any], file_metadata: MyFileMetaData
-    ) -> Tuple[List[str], List[Dict]]:
+    ) -> Dict:
         """Create text chunks and their metadata
 
         Args:
@@ -92,7 +134,7 @@ class Pipeline:
 
     def _create_image_chunks(
         self, images: List[Any], descriptions: List[str], file_metadata: MyFileMetaData
-    ) -> Tuple[List[str], List[Dict]]:
+    ) -> Dict:
         """Create image chunks and their metadata
 
         Args:
@@ -122,8 +164,12 @@ class Pipeline:
         if not texts:
             return None
 
-        input_texts, input_metadatas = self._create_text_chunks(texts, file_metadata)
-        return await self.text_vector_store.add_texts(
+        text_chunking_output = self._create_text_chunks(texts, file_metadata)
+        input_texts, input_metadatas = (
+            text_chunking_output["texts"],
+            text_chunking_output["metadatas"],
+        )
+        return await self.text_vector_store.add_entries(
             texts=input_texts, metadatas=input_metadatas
         )
 
@@ -134,11 +180,15 @@ class Pipeline:
         if not images:
             return None
 
-        image_texts, image_metadatas = self._create_image_chunks(
+        image_chunking_output = self._create_image_chunks(
             images, descriptions, file_metadata
         )
+        image_texts, image_metadatas = (
+            image_chunking_output["texts"],
+            image_chunking_output["metadatas"],
+        )
         return (
-            await self.image_vector_store.add_texts(
+            await self.image_vector_store.add_entries(
                 texts=image_texts,
                 metadatas=image_metadatas,
                 filter_by_min_len=10,
@@ -153,21 +203,23 @@ class Pipeline:
 
     async def _add_file_summary_to_store(self, summary: str, file_metadata: Dict):
         """Add the summary to vector store"""
+        summary_output = self.summary_vector_store.create_texts_and_metadatas(
+            [
+                BaseChunk(
+                    chunk=summary,
+                    chunk_no="0",
+                    page_range=PageRange(start_page=0, end_page=0),
+                )
+            ],
+            file_metadata,
+            prefix="summary",
+        )
         summary_texts, summary_metadatas = (
-            self.summary_vector_store.create_texts_and_metadatas(
-                [
-                    BaseChunk(
-                        chunk=summary,
-                        chunk_no="0",
-                        page_range=PageRange(start_page=0, end_page=0),
-                    )
-                ],
-                file_metadata,
-                prefix="summary",
-            )
+            summary_output["texts"],
+            summary_output["metadatas"],
         )
 
-        return await self.summary_vector_store.add_texts(
+        return await self.summary_vector_store.add_entries(
             texts=summary_texts, metadatas=summary_metadatas
         )
 
@@ -180,11 +232,11 @@ class Pipeline:
             # Convert PDF to document
             with pdf_blob_to_pdfplumber_doc(file.file_content) as doc:
                 # Create file metadata
-                file_metadata = create_file_metadata_from_bytes(
-                    file_bytes=file.file_content, file_name=file.file_name
-                )
+                file_metadata: MyFileMetaData = create_file_upload_metadata(file)
+                logger.info(f"Created file upload metadata: {file_metadata}")
                 num_pages = len(doc.pages)
-                texts, images = extract_texts_and_images(doc, report=True)
+                extraction = extract_texts_and_images(doc, report=True)
+                texts, images = extraction["texts"], extraction["images"]
                 logger.info("Extracted raw texts and images")
 
             summary = ""
@@ -233,12 +285,12 @@ class Pipeline:
 
                     tasks["image_upload"] = asyncio.create_task(
                         self.image_container_client.upload_base64_image_to_blob(
-                            (i["chunk_id"] for i in image_metadatas),
+                            (i.chunk_id for i in image_metadatas),
                             (image.image_base64 for image in images),
+                            metadata=file_metadata.model_dump(),
                         )
                     )
 
-                    logger.info(f"Saved images in {file_name}")
                 except Exception as e:
                     logger.error(f"Image processing failed: {str(e)}")
                     errors.append(f"Image processing failed: {str(e)}")
