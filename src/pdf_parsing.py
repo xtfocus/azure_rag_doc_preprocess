@@ -115,7 +115,7 @@ def process_page_as_an_image(
 ) -> Tuple[List[FileText], List[FileImage]]:
     """Process a page like the whole page is an image"""
     page_image = FileImage(
-        page_no=page_no, image_no=page_no, image_base64=page_to_base64(page, scale=1)
+        page_no=page_no, image_no=page_no, image_base64=page_to_base64(page, scale=2)
     )
     stats.update(has_text=False, has_images=True)
     return [], [page_image]
