@@ -139,7 +139,7 @@ class AzureContainerClient(BaseAzureContainerClient):
         self,
         blob_names: Iterable[str],
         base64_images: Iterable[str],
-        metadata: Optional[Dict[str, str]] = None,
+        metadata: Dict[str, str] = dict(),
     ):
         container_client = self.client.get_container_client(self.container_name)
 

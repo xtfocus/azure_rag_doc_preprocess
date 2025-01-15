@@ -1,5 +1,4 @@
-import json
-from typing import Dict, List
+from typing import List
 
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import ResourceNotFoundError
@@ -68,7 +67,12 @@ class MyAzureSearch:
         self.search_client.upload_documents(documents=documents)
 
     @staticmethod
-    def filtered_texts_and_metadatas_by_min_length(texts, metadatas, min_len=10):
+    def filtered_texts_and_metadatas_by_min_length(
+        texts: List[str], metadatas: List[AzureSearchDocMetaData], min_len=10
+    ):
+        """
+        Filter chunk by its length. Useful to remove small details
+        """
 
         # Filter texts and metadatas where text length is >= 10
         filtered_batch = [
@@ -94,7 +98,7 @@ class MyAzureSearch:
     async def add_entries(
         self,
         texts: List[str],
-        metadatas=List[AzureSearchDocMetaData],
+        metadatas: List[AzureSearchDocMetaData],
         batch_size: int = 10,
         filter_by_min_len: int = 0,
     ):
@@ -103,9 +107,7 @@ class MyAzureSearch:
 
         for i in range(0, len(texts), batch_size):
             batch_texts = texts[i : i + batch_size]
-            batch_metadatas = (
-                metadatas[i : i + batch_size] if metadatas else [{}] * len(batch_texts)
-            )
+            batch_metadatas = metadatas[i : i + batch_size]
 
             if filter_by_min_len:
                 filtered_texts, filtered_metadatas = (
@@ -120,7 +122,7 @@ class MyAzureSearch:
                 continue
 
             try:
-                # Batch embed texts
+                # Batch embedding request
                 embeddings = self.embedding_function(filtered_texts)
             except Exception as e:
                 logger.error(f" Error during text embedding for batch {i}: {str(e)}")
@@ -165,7 +167,14 @@ class MyAzureSearch:
 
 
 class MyAzureOpenAIEmbeddings:
-    def __init__(self, api_key, api_version, azure_endpoint, model, dimensions):
+    def __init__(
+        self,
+        api_key: str,
+        api_version: str,
+        azure_endpoint: str,
+        model: str,
+        dimensions: str,
+    ):
         """
         Initializes the MyAzureOpenAIEmbeddings instance.
 
@@ -179,7 +188,7 @@ class MyAzureOpenAIEmbeddings:
             api_key=api_key, api_version=api_version, azure_endpoint=azure_endpoint
         )
         self.model = model
-        self.dimensions = dimensions
+        self.dimensions = int(dimensions)
 
     def embed_query(self, texts: List[str]) -> List[list]:
         """
