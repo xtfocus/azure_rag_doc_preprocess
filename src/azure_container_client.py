@@ -7,6 +7,7 @@ Desc: handling I/O tasks with Blob Storage for a specfic container
 import base64
 from abc import ABC
 from typing import Dict, Iterable, List, Optional
+from urllib.parse import quote
 
 from azure.storage.blob import BlobClient, BlobServiceClient, ContainerClient
 from loguru import logger
@@ -138,40 +139,43 @@ class AzureContainerClient(BaseAzureContainerClient):
         self,
         blob_names: Iterable[str],
         base64_images: Iterable[str],
-        metadata: Optional[Dict[str, str]] = None,
+        metadata: Dict[str, str] = dict(),
     ):
-        """
-        Uploads base64-encoded images to Azure Blob Storage.
-
-        Args:
-            connection_string (str): Connection string to Azure Blob Storage.
-            container_name (str): Name of the container.
-            blob_name (str): Name of the blob (including extension, e.g., 'image.png').
-            base64_image (str): The base64-encoded image string.
-
-        Returns:
-            str: URL of the uploaded blob.
-        """
-
         container_client = self.client.get_container_client(self.container_name)
 
+        if metadata:
+            # URL encode both keys and values in metadata
+            encoded_metadata = {
+                quote(k): quote(v) if isinstance(v, str) else str(v)
+                for k, v in metadata.items()
+            }
+        else:
+            encoded_metadata = None
+
+        logger.debug(encoded_metadata)
         try:
             for blob_name, base64_image in zip(blob_names, base64_images):
-                # Decode the base64 image
                 image_data = base64.b64decode(base64_image)
+                # URL encode the blob name
+                encoded_blob_name = quote(blob_name)
 
-                # Create a BlobClient
-                blob_client = container_client.get_blob_client(blob_name)
+                # Get blob client with encoded name
+                blob_client: BlobClient = container_client.get_blob_client(
+                    encoded_blob_name
+                )
 
-                # Upload the image
+                # Upload with encoded metadata
                 blob_client.upload_blob(
                     image_data,
                     overwrite=True,
                     content_type="image/png",
-                    metadata=metadata,
+                    metadata=encoded_metadata,
                 )
+
+                logger.debug(f"Successfully uploaded blob: {blob_name}")
+
         except Exception as e:
-            logger.error(f"Upload error {e}")
+            logger.error(f"Upload images error: {str(e)}")
             raise
 
         return
