@@ -14,7 +14,7 @@ class ImageDescriptor:
         self.config = config
         self.prompt = prompt
 
-    async def run(self, base64_data: str, summary: str, temperature=None):
+    async def run(self, base64_data: str, summary: str, temperature=None) -> str:
         """
         base64_data: base64 str
         """
