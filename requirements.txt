@@ -8,6 +8,6 @@ environs==11.0.0
 loguru==0.7.2
 azure-search-documents==11.6.0b4
 azure-storage-blob==12.21.0
-pymupdf==1.24.9
+pdfplumber==0.11.5
 
 
