@@ -70,6 +70,7 @@ async def process_user_file_background(
             result={"error": str(e)},
         )
         logger.error(error)
+        raise
         return {"file_name": file_name, "error": str(e)}
 
 

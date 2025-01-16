@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
+from typing import Any, Callable, Dict, List, NamedTuple, Optional
 
 from loguru import logger
 
@@ -7,7 +7,7 @@ from src.azure_container_client import AzureContainerClient
 from src.file_summarizer import FileSummarizer
 from src.image_descriptor import ImageDescriptor
 from src.models import BaseChunk, MyFile, MyFileMetaData, PageRange
-from src.pdf_parsing import FileImage, extract_texts_and_images
+from src.pdf_parsing import FileImage, FileText, extract_texts_and_images
 from src.pdf_utils import pdf_blob_to_pdfplumber_doc
 from src.splitters import SimplePageTextSplitter
 from src.upload_metadata import create_file_upload_metadata
@@ -115,8 +115,8 @@ class Pipeline:
         return await asyncio.gather(*tasks)
 
     def _create_text_chunks(
-        self, texts: List[Any], file_metadata: Dict
-    ) -> Tuple[List[str], List[Dict]]:
+        self, texts: List[FileText], file_metadata: MyFileMetaData
+    ) -> Dict[str, List[Any]]:
         """Create text chunks and their metadata
 
         Args:
@@ -126,14 +126,19 @@ class Pipeline:
         Returns:
             Tuple containing lists of texts and their metadata
         """
-        text_chunks = self.text_splitter.split_text((text.dict() for text in texts))
+        text_chunks = self.text_splitter.split_text(
+            (text.model_dump() for text in texts)
+        )
         return self.text_vector_store.create_texts_and_metadatas(
             text_chunks, file_metadata, prefix="text"
         )
 
     def _create_image_chunks(
-        self, images: List[Any], descriptions: List[str], file_metadata: Dict
-    ) -> Tuple[List[str], List[Dict]]:
+        self,
+        images: List[FileImage],
+        descriptions: List[str],
+        file_metadata: MyFileMetaData,
+    ) -> Dict:
         """Create image chunks and their metadata
 
         Args:
@@ -157,55 +162,68 @@ class Pipeline:
         )
 
     async def _create_and_add_text_chunks(
-        self, texts: List[Any], file_metadata: MyFileMetaData
+        self, texts: List[FileText], file_metadata: MyFileMetaData
     ):
         """Combine creation and adding of text chunks"""
         if not texts:
             return None
 
-        input_texts, input_metadatas = self._create_text_chunks(texts, file_metadata)
+        text_chunking_output = self._create_text_chunks(texts, file_metadata)
+        input_texts, input_metadatas = (
+            text_chunking_output["texts"],
+            text_chunking_output["metadatas"],
+        )
         return await self.text_vector_store.add_entries(
             texts=input_texts, metadatas=input_metadatas
         )
 
     async def _create_and_add_image_chunks(
-        self, images: List[Any], descriptions: List[str], file_metadata: MyFileMetaData
-    ) -> Dict:
+        self,
+        images: List[FileImage],
+        descriptions: List[str],
+        file_metadata: MyFileMetaData,
+    ) -> Dict[str, Any]:
         """Combine creation and adding of image chunks"""
         if not images:
-            return None
+            return {"status": "no_images", "image_metadatas": []}
 
-        image_texts, image_metadatas = self._create_image_chunks(
+        image_chunking_output = self._create_image_chunks(
             images, descriptions, file_metadata
         )
-        return {
-            "image_results": await self.image_vector_store.add_entries(
-                texts=image_texts,
-                metadatas=image_metadatas,
-                filter_by_min_len=10,
-            ),
-            "image_metadatas": image_metadatas,
-        }
+        image_texts, image_metadatas = (
+            image_chunking_output["texts"],
+            image_chunking_output["metadatas"],
+        )
+        result = await self.image_vector_store.add_entries(
+            texts=image_texts,
+            metadatas=image_metadatas,
+            filter_by_min_len=10,
+        )
+        return {"result": result, "image_metadatas": image_metadatas}
 
     async def _create_summary(self, texts: List[str], images: List[FileImage]) -> str:
         """Just create the summary"""
 
         return await self.file_summarizer.run(texts, images)
 
-    async def _add_file_summary_to_store(self, summary: str, file_metadata: Dict):
+    async def _add_file_summary_to_store(
+        self, summary: str, file_metadata: MyFileMetaData
+    ):
         """Add the summary to vector store"""
+        summary_output = self.summary_vector_store.create_texts_and_metadatas(
+            [
+                BaseChunk(
+                    chunk=summary,
+                    chunk_no="0",
+                    page_range=PageRange(start_page=0, end_page=0),
+                )
+            ],
+            file_metadata,
+            prefix="summary",
+        )
         summary_texts, summary_metadatas = (
-            self.summary_vector_store.create_texts_and_metadatas(
-                [
-                    BaseChunk(
-                        chunk=summary,
-                        chunk_no="0",
-                        page_range=PageRange(start_page=0, end_page=0),
-                    )
-                ],
-                file_metadata,
-                prefix="summary",
-            )
+            summary_output["texts"],
+            summary_output["metadatas"],
         )
 
         return await self.summary_vector_store.add_entries(
@@ -264,13 +282,10 @@ class Pipeline:
 
                     logger.info(f"Created image descriptions for {file.file_name}")
 
-                    image_processing_output = await self._create_and_add_image_chunks(
+                    image_chunk_result = await self._create_and_add_image_chunks(
                         images, descriptions, file_metadata
                     )
-                    image_results, image_metadatas = (
-                        image_processing_output["image_results"],
-                        image_processing_output["image_metadatas"],
-                    )
+                    image_metadatas = image_chunk_result["image_metadatas"]
 
                     logger.info(f"Created image index for {file.file_name}")
 
