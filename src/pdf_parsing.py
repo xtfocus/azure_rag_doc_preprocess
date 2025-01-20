@@ -5,87 +5,23 @@ while maintaining page information
 
 import base64
 import io
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Union
 
 from loguru import logger
 from pdfplumber.page import Page
 from pdfplumber.pdf import PDF as Doc
-from pydantic import BaseModel
 
-from src.pdf_utils import get_images_as_base64, page_extract_tables_md
-
-
-class FileText(BaseModel):
-    """
-    Represents a page of text
-    """
-
-    page_no: int
-    text: Optional[str]
+from src.models import FileImage, FileText, PageStats
+from src.pdf_utils import (get_images_as_base64, page_extract_tables_md,
+                           page_to_base64, pdf_blob_to_pdfplumber_doc)
 
 
-class FileImage(BaseModel):
-    """
-    Represent an image
-    """
-
-    page_no: int
-    image_no: int
-    image_base64: str
-
-
-@dataclass
-class PageStats:
-    """
-    Document statistics on the number of pages grouped by
-        whether they contain or not contain any texts or images
-    """
-
-    text_yes_image_yes: int = 0
-    text_yes_image_no: int = 0
-    text_no_image_yes: int = 0
-    text_no_image_no: int = 0
-
-    def update(self, has_text: bool, has_images: bool) -> None:
-        if has_text and has_images:
-            self.text_yes_image_yes += 1
-        elif has_text:
-            self.text_yes_image_no += 1
-        elif has_images:
-            self.text_no_image_yes += 1
-        else:
-            self.text_no_image_no += 1
-
-    def log_summary(self, doc_metadata: dict) -> None:
-        logger.info(f"File metadata: {doc_metadata}")
-        logger.info(
-            "\n"
-            "|                    | Has Images         | No Images          |\n"
-            "|--------------------|--------------------|--------------------|\n"
-            f"| **Has Text**       | {self.text_yes_image_yes:>18} | {self.text_yes_image_no:>18} |\n"
-            f"| **No Text**        | {self.text_no_image_yes:>18} | {self.text_no_image_no:>18} |"
-        )
-
-
-def doc_is_ppt(pdf: Doc) -> bool:
+def doc_exported_from_ppt(pdf: Doc) -> bool:
     """Return True if pdf document is a PowerPoint export"""
     metadata = pdf.metadata
     return any(
         "PowerPoint" in metadata.get(field, "") for field in ["Creator", "Producer"]
     )
-
-
-def page_to_base64(page: Page, format: str = "PNG", scale: int = 2) -> str:
-    """Convert whole page to base64 image"""
-    # Convert page to image using pdfplumber's native method
-    img = page.to_image(resolution=72 * scale)
-
-    # Get the image as bytes
-    img_buffer = io.BytesIO()
-    img.original.save(img_buffer, format=format)
-
-    return base64.b64encode(img_buffer.getvalue()).decode()
 
 
 def get_page_drawings_stats(page: Page) -> Dict[str, int]:
@@ -112,18 +48,20 @@ def is_infographic_page(page: Page) -> bool:
 
 def process_page_as_an_image(
     page: Page, page_no: int, stats: PageStats
-) -> Tuple[List[FileText], List[FileImage]]:
+) -> Dict[str, Union[List[FileText], List[FileImage]]]:
     """Process a page like the whole page is an image"""
     page_image = FileImage(
         page_no=page_no, image_no=page_no, image_base64=page_to_base64(page, scale=1)
     )
     stats.update(has_text=False, has_images=True)
-    return [], [page_image]
+    return {"texts": [], "images": [page_image]}
 
 
 def process_regular_page(
-    page: Page, page_no: int, stats: PageStats
-) -> Tuple[List[FileText], List[FileImage]]:
+    page: Page,
+    page_no: int,
+    stats: PageStats,
+) -> Dict[str, Union[List[FileText], List[FileImage]]]:
     """Process regular PDF page with text and images"""
     if is_infographic_page(page):
         logger.info(
@@ -144,7 +82,7 @@ def process_regular_page(
             return process_page_as_an_image(page, page_no, stats)
         else:
             logger.info(f"Page {page_no} contains no elements and will be skipped")
-            return [], []
+            return {"texts": [], "images": []}
 
     # Process text and images
     texts = [FileText(page_no=page_no, text=text)]
@@ -154,19 +92,22 @@ def process_regular_page(
     ]
 
     stats.update(has_text=bool(text), has_images=bool(images))
-    return texts, images
+    return {"texts": texts, "images": images}
 
 
-def extract_texts_and_images(doc: Doc, report: bool = False) -> Dict:
+def pdfplumber_extract_texts_and_images(doc: Doc, report: bool = False) -> Dict:
     """Extract texts and images from PDF document"""
     stats = PageStats()
     all_texts: List[FileText] = []
     all_images: List[FileImage] = []
 
-    process_fn = process_page_as_an_image if doc_is_ppt(doc) else process_regular_page
+    process_fn = (
+        process_page_as_an_image if doc_exported_from_ppt(doc) else process_regular_page
+    )
 
     for page_no, page in enumerate(doc.pages):
-        texts, images = process_fn(page, page_no, stats)
+        processing_output = process_fn(page, page_no, stats)
+        texts, images = processing_output["texts"], processing_output["images"]
         all_texts.extend(texts)
         all_images.extend(images)
 
@@ -174,3 +115,20 @@ def extract_texts_and_images(doc: Doc, report: bool = False) -> Dict:
         stats.log_summary(doc.metadata)
 
     return {"texts": all_texts, "images": all_images}
+
+
+def pdf_extract_texts_and_images(file_content: bytes) -> Dict:
+    texts = []
+    images = []
+    num_pages = None
+    with pdf_blob_to_pdfplumber_doc(file_content) as doc:
+        # Create file metadata
+        num_pages = len(doc.pages)
+        extraction = pdfplumber_extract_texts_and_images(doc, report=True)
+        texts, images = extraction["texts"], extraction["images"]
+        logger.info("Extracted raw texts and images")
+    return {
+        "texts": texts,
+        "images": images,
+        "num_pages": num_pages,
+    }

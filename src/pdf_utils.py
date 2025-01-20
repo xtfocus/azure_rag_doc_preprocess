@@ -6,6 +6,20 @@ import pdfplumber
 from loguru import logger
 
 
+def page_to_base64(
+    page: pdfplumber.page.Page, format: str = "PNG", scale: int = 2
+) -> str:
+    """Convert whole page to base64 image"""
+    # Convert page to image using pdfplumber's native method
+    img = page.to_image(resolution=72 * scale)
+
+    # Get the image as bytes
+    img_buffer = io.BytesIO()
+    img.original.save(img_buffer, format=format)
+
+    return base64.b64encode(img_buffer.getvalue()).decode()
+
+
 def page_extract_tables_md(
     page: pdfplumber.page.Page, preserve_linebreaks: bool = False
 ) -> list[str]:

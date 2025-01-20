@@ -1,6 +1,7 @@
 import json
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -10,6 +11,58 @@ class MyFile(BaseModel):
     file_name: str
     file_content: bytes
     uploader: str = "default"
+
+
+class FileText(BaseModel):
+    """
+    Represents a page of text
+    """
+
+    page_no: int
+    text: Optional[str]
+
+
+class FileImage(BaseModel):
+    """
+    Represent an image
+    """
+
+    page_no: int
+    image_no: int
+    image_base64: str
+
+
+@dataclass
+class PageStats:
+    """
+    Document statistics on the number of pages grouped by
+        whether they contain or not contain any texts or images
+    """
+
+    text_yes_image_yes: int = 0
+    text_yes_image_no: int = 0
+    text_no_image_yes: int = 0
+    text_no_image_no: int = 0
+
+    def update(self, has_text: bool, has_images: bool) -> None:
+        if has_text and has_images:
+            self.text_yes_image_yes += 1
+        elif has_text:
+            self.text_yes_image_no += 1
+        elif has_images:
+            self.text_no_image_yes += 1
+        else:
+            self.text_no_image_no += 1
+
+    def log_summary(self, doc_metadata: dict) -> None:
+        logger.info(f"File metadata: {doc_metadata}")
+        logger.info(
+            "\n"
+            "|                    | Has Images         | No Images          |\n"
+            "|--------------------|--------------------|--------------------|\n"
+            f"| **Has Text**       | {self.text_yes_image_yes:>18} | {self.text_yes_image_no:>18} |\n"
+            f"| **No Text**        | {self.text_no_image_yes:>18} | {self.text_no_image_no:>18} |"
+        )
 
 
 class CustomSkillException(Exception):

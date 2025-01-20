@@ -1,14 +1,16 @@
 import asyncio
-from typing import Any, Callable, Dict, List, NamedTuple, Optional
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Union
 
 from loguru import logger
 
 from src.azure_container_client import AzureContainerClient
+from src.docx_parsing import docx_extract_texts_and_images
 from src.file_summarizer import FileSummarizer
+from src.file_utils import detect_file_type
 from src.image_descriptor import ImageDescriptor
-from src.models import BaseChunk, MyFile, MyFileMetaData, PageRange
-from src.pdf_parsing import FileImage, FileText, extract_texts_and_images
-from src.pdf_utils import pdf_blob_to_pdfplumber_doc
+from src.models import (BaseChunk, FileImage, FileText, MyFile, MyFileMetaData,
+                        PageRange)
+from src.pdf_parsing import pdf_extract_texts_and_images
 from src.splitters import SimplePageTextSplitter
 from src.upload_metadata import create_file_upload_metadata
 from src.vector_stores import MyAzureSearch
@@ -121,7 +123,7 @@ class Pipeline:
 
         Args:
             texts: List of text objects
-            file_metadata: Metadata about the file
+            file_metadata: Metadata of the file
 
         Returns:
             Tuple containing lists of texts and their metadata
@@ -230,20 +232,34 @@ class Pipeline:
             texts=summary_texts, metadatas=summary_metadatas
         )
 
+    @staticmethod
+    def extract_texts_and_images(
+        file: MyFile,
+    ) -> Dict[str, Union[List[FileText], List[FileImage]]]:
+        extraction = {"texts": [], "images": [], "num_pages": None}
+
+        file_type: str = detect_file_type(file.file_content)
+
+        logger.debug(f"File type {file_type} detected")
+        if file_type == "pdf":
+            extraction = pdf_extract_texts_and_images(file.file_content)
+        elif file_type == "docx":
+            extraction = docx_extract_texts_and_images(file.file_content)
+
+        return extraction
+
     async def process_file(self, file: MyFile) -> ProcessingResult:
         """Process a single file through the pipeline with optimized concurrent operations"""
 
         errors = []
+
         try:
-            # Convert PDF to document
-            with pdf_blob_to_pdfplumber_doc(file.file_content) as doc:
-                # Create file metadata
-                file_metadata: MyFileMetaData = create_file_upload_metadata(file)
-                logger.info(f"Created file upload metadata: {file_metadata}")
-                num_pages = len(doc.pages)
-                extraction = extract_texts_and_images(doc, report=True)
-                texts, images = extraction["texts"], extraction["images"]
-                logger.info("Extracted raw texts and images")
+            file_metadata: MyFileMetaData = create_file_upload_metadata(file)
+            logger.info(f"Created file upload metadata: {file_metadata}")
+            content_extraction_result = self.extract_texts_and_images(file)
+            texts = content_extraction_result.get("texts")
+            images = content_extraction_result.get("images")
+            num_pages = content_extraction_result.get("num_pages", 0)
 
             summary = ""
             # Create tasks dict to track all async operations
