@@ -33,7 +33,7 @@ def create_file_metadata_from_bytes(file_bytes: bytes, file_name: str) -> dict:
 
 def detect_file_type(file_bytes: bytes) -> str:
     """
-    Detect the file type (PDF, DOC, DOCX, JPG, PNG, CSV, XLSX, TXT) with enhanced validation.
+    Detect the file type (PDF, DOC, DOCX, JPG/JPEG, PNG, CSV, XLSX, TXT) with enhanced validation.
 
     Args:
         file_bytes (bytes): File content as bytes.
@@ -41,90 +41,65 @@ def detect_file_type(file_bytes: bytes) -> str:
     Returns:
         str: 'pdf', 'doc', 'docx', 'jpg', 'png', 'csv', 'xlsx', 'txt', or 'unknown'.
     """
-    # File signatures
-    PDF_SIGNATURE = bytes([0x25, 0x50, 0x44, 0x46, 0x2D])  # %PDF-
-    DOCX_SIGNATURE = bytes([0x50, 0x4B, 0x03, 0x04])  # ZIP
-    JPG_SIGNATURE = bytes([0xFF, 0xD8, 0xFF, 0xE0])  # Standard JPEG
-    JPG_SIGNATURE_EXIF = bytes([0xFF, 0xD8, 0xFF, 0xE1])  # JPEG with EXIF
-    PNG_SIGNATURE = bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])  # Full PNG
-    DOC_SIGNATURES = [
-        bytes(
-            [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]
-        ),  # Compound File Binary Format
-        bytes([0x0D, 0x44, 0x4F, 0x43]),  # Older DOC format
-        bytes([0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1, 0x00]),  # Alternative CFBF
-    ]
+    # Basic signature check
+    if len(file_bytes) < 4:  # We only need 4 bytes for JPEG
+        return "unknown"
 
-    # Ensure the input has enough bytes for signature detection
-    if len(file_bytes) < 8:
+    # JPEG starts with FF D8 FF
+    if file_bytes.startswith(bytes([0xFF, 0xD8, 0xFF])):
+        # The fourth byte is usually E0, E1, E2, E8, DB, or EE
+        fourth_byte = file_bytes[3] if len(file_bytes) > 3 else 0
+        if fourth_byte in [0xE0, 0xE1, 0xE2, 0xE8, 0xDB, 0xEE]:
+            return "jpg"
+
+    # Rest of the file type checks...
+    if len(file_bytes) < 8:  # Other formats need 8 bytes
         return "unknown"
 
     header = file_bytes[:8]
 
-    # Check signatures
-    if header.startswith(PDF_SIGNATURE):
+    # PDF signature
+    if header.startswith(bytes([0x25, 0x50, 0x44, 0x46, 0x2D])):  # %PDF-
         return "pdf"
 
-    if header.startswith(JPG_SIGNATURE) or header.startswith(JPG_SIGNATURE_EXIF):
-        return "jpg"
-
-    if header.startswith(PNG_SIGNATURE):
+    # PNG signature
+    if header.startswith(bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])):
         return "png"
 
-    # Check for DOC file signatures
-    for doc_sig in DOC_SIGNATURES:
-        if header.startswith(doc_sig):
+    # DOC signatures
+    DOC_SIGNATURES = [
+        bytes([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]),
+        bytes([0x0D, 0x44, 0x4F, 0x43]),
+        bytes([0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1, 0x00]),
+    ]
+    for sig in DOC_SIGNATURES:
+        if header.startswith(sig):
             return "doc"
 
-    # Handle Office documents (DOCX/XLSX)
-    if header.startswith(DOCX_SIGNATURE):
+    # DOCX/XLSX (ZIP) signature
+    if header.startswith(bytes([0x50, 0x4B, 0x03, 0x04])):
         try:
             with ZipFile(BytesIO(file_bytes)) as zf:
-                # Check for specific files in Office Open XML
-                if "word/document.xml" in zf.namelist():
+                filelist = zf.namelist()
+                if "word/document.xml" in filelist:
                     return "docx"
-                if "xl/workbook.xml" in zf.namelist():
+                if "xl/workbook.xml" in filelist:
                     return "xlsx"
         except:
             pass
 
-    # Handle CSV with content validation
+    # Text-based formats (CSV, TXT)
     try:
-        # Read first 1024 bytes for encoding detection
-        raw_data = file_bytes[:1024]
-        encoding = chardet.detect(raw_data)["encoding"]
-
-        # Try to decode and check for commas
-        content = raw_data.decode(encoding)
-        if "," in content.splitlines()[0]:
-            return "csv"
-    except:
-        pass
-
-    # Handle TXT files with encoding validation
-    try:
-        # Read first 1024 bytes for encoding detection
-        raw_data = file_bytes[:1024]
-        encoding = chardet.detect(raw_data)["encoding"]
-
-        # Try to decode the content
-        content = raw_data.decode(encoding)
-        # Check if the content is printable ASCII or valid Unicode
-        if any(ord(c) < 128 and c.isprintable() for c in content):
-            return "txt"
-    except:
-        pass
-
-    # Additional text file validation for general text
-    try:
-        # Read first 1024 bytes
-        raw_data = file_bytes[:1024]
-
-        # Check if content appears to be text
-        encoding = chardet.detect(raw_data)
+        sample = file_bytes[:1024]
+        encoding = chardet.detect(sample)
         if encoding["encoding"] and encoding["confidence"] > 0.9:
-            text = raw_data.decode(encoding["encoding"])
-            # Check if content is primarily printable characters
+            text = sample.decode(encoding["encoding"])
+
+            # Check for CSV
+            if "," in text.splitlines()[0]:
+                return "csv"
+
+            # Check for general text
             printable_ratio = sum(c.isprintable() for c in text) / len(text)
             if printable_ratio > 0.95:
                 return "txt"

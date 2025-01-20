@@ -251,6 +251,8 @@ class Pipeline:
             extraction = txt_extract_texts(file.file_content)
         elif file_type in ("jpg", "jpeg", "png"):
             extraction = image_file_extract(file.file_content)
+        else:
+            raise ValueError(f"File type {file_type} not supported")
 
         return extraction
 
