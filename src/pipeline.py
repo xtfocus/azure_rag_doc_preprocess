@@ -8,10 +8,12 @@ from src.docx_parsing import docx_extract_texts_and_images
 from src.file_summarizer import FileSummarizer
 from src.file_utils import detect_file_type
 from src.image_descriptor import ImageDescriptor
+from src.image_file_parsing import image_file_extract
 from src.models import (BaseChunk, FileImage, FileText, MyFile, MyFileMetaData,
                         PageRange)
 from src.pdf_parsing import pdf_extract_texts_and_images
 from src.splitters import SimplePageTextSplitter
+from src.txt_parsing import txt_extract_texts
 from src.upload_metadata import create_file_upload_metadata
 from src.vector_stores import MyAzureSearch
 
@@ -236,7 +238,7 @@ class Pipeline:
     def extract_texts_and_images(
         file: MyFile,
     ) -> Dict[str, Union[List[FileText], List[FileImage]]]:
-        extraction = {"texts": [], "images": [], "num_pages": None}
+        extraction: Dict = {"texts": [], "images": [], "num_pages": None}
 
         file_type: str = detect_file_type(file.file_content)
 
@@ -245,6 +247,10 @@ class Pipeline:
             extraction = pdf_extract_texts_and_images(file.file_content)
         elif file_type == "docx":
             extraction = docx_extract_texts_and_images(file.file_content)
+        elif file_type == "txt":
+            extraction = txt_extract_texts(file.file_content)
+        elif file_type in ("jpg", "jpeg", "png"):
+            extraction = image_file_extract(file.file_content)
 
         return extraction
 
