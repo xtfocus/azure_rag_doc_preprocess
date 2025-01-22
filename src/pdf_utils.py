@@ -4,11 +4,36 @@ from typing import List
 
 import pdfplumber
 from loguru import logger
+from pdfplumber.page import Page
+from pdfplumber.pdf import PDF as Doc
 
 
-def page_extract_tables_md(
-    page: pdfplumber.page.Page, preserve_linebreaks: bool = False
-) -> list[str]:
+def pdf_doc_is_ppt(pdf: Doc) -> bool:
+    """Return True if pdf document is a PowerPoint export"""
+    metadata = pdf.metadata
+    return any(
+        "PowerPoint" in metadata.get(field, "") for field in ["Creator", "Producer"]
+    )
+
+
+def pdf_page_is_landscape(page: Page, ratio=1.2) -> bool:
+    """
+    Determines if a given pdfplumber.page.Page is in landscape layout.
+
+    Args:
+        page (Page): The PDF page to check.
+
+    Returns:
+        bool: True if the page layout is landscape, False otherwise.
+    """
+    # Retrieve the page width and height
+    width, height = page.width, page.height
+
+    # Check if width is greater than height multiplied by ratio
+    return width > (height * ratio)
+
+
+def page_extract_tables_md(page: Page, preserve_linebreaks: bool = False) -> list[str]:
     """
     Extract tables from a PDF page and convert them to markdown format.
 
@@ -88,12 +113,12 @@ def page_extract_tables_md(
             )
             markdown.append(data_row)
 
-        markdown_tables.append("```Markdown" + "\n".join(markdown) + "```")
+        markdown_tables.append("```Markdown\n" + "\n".join(markdown) + "\n```")
 
     return markdown_tables
 
 
-def pdf_blob_to_pdfplumber_doc(blob: bytes) -> pdfplumber.PDF:
+def pdf_blob_to_pdfplumber_doc(blob: bytes) -> Doc:
     """
     Converts a PDF byte blob into a pdfplumber PDF object.
 
@@ -120,7 +145,7 @@ def insignificant_image(image_bbox: tuple):
     return 0
 
 
-def get_images_as_base64(page: pdfplumber.page.Page) -> List[str]:
+def get_images_as_base64(page: Page) -> List[str]:
     """
     Converts all images on a given page to base64-encoded strings with high quality.
 

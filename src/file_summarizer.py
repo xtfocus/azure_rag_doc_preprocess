@@ -1,6 +1,7 @@
 import random
 from typing import Any, Dict, List
 
+from loguru import logger
 from openai import AsyncAzureOpenAI
 
 from src.pdf_parsing import FileImage
@@ -72,6 +73,10 @@ class FileSummarizer:
         # Sample inputs if necessary
         sampled_images = self._sample_items(images, self.max_samples)
         sampled_texts = self._sample_items(texts, self.max_samples)
+
+        logger.info(
+            f"Creating summary with a sample of: {sampled_texts} text chunks and {sampled_images} images"
+        )
 
         # Set temperature
         if temperature is None:

@@ -188,6 +188,7 @@ async def reindex_file_background(
         logger.error(
             f"Error during reindexing of file '{file_name}' in container '{container_name}': {str(e)}"
         )
+        raise
 
 
 @router.post("/api/exec/blob_container/")

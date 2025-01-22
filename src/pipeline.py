@@ -2,12 +2,13 @@ import asyncio
 from typing import Any, Callable, Dict, List, NamedTuple, Optional
 
 from loguru import logger
+from pydantic import Base64Str
 
 from src.azure_container_client import AzureContainerClient
 from src.file_summarizer import FileSummarizer
 from src.image_descriptor import ImageDescriptor
 from src.models import BaseChunk, MyFile, MyFileMetaData, PageRange
-from src.pdf_parsing import FileImage, FileText, extract_texts_and_images
+from src.pdf_parsing import FileImage, FileText, extract_texts_images_tables
 from src.pdf_utils import pdf_blob_to_pdfplumber_doc
 from src.splitters import SimplePageTextSplitter
 from src.upload_metadata import create_file_upload_metadata
@@ -115,7 +116,7 @@ class Pipeline:
         return await asyncio.gather(*tasks)
 
     def _create_text_chunks(
-        self, texts: List[FileText], file_metadata: MyFileMetaData
+        self, texts: List[FileText], file_metadata: MyFileMetaData, chunking=True
     ) -> Dict[str, List[Any]]:
         """Create text chunks and their metadata
 
@@ -126,9 +127,21 @@ class Pipeline:
         Returns:
             Tuple containing lists of texts and their metadata
         """
-        text_chunks = self.text_splitter.split_text(
-            (text.model_dump() for text in texts)
-        )
+        if chunking:
+            text_chunks: List[BaseChunk] = self.text_splitter.split_text(
+                (text.model_dump() for text in texts)
+            )
+        else:
+            text_chunks = [
+                BaseChunk(
+                    chunk_no=f"whole{i}",  # whole thing as a chunk
+                    chunk=text.text,
+                    page_range=PageRange(
+                        start_page=text.page_no, end_page=text.page_no
+                    ),
+                )
+                for i, text in enumerate(texts)
+            ]
         return self.text_vector_store.create_texts_and_metadatas(
             text_chunks, file_metadata, prefix="text"
         )
@@ -162,13 +175,15 @@ class Pipeline:
         )
 
     async def _create_and_add_text_chunks(
-        self, texts: List[FileText], file_metadata: MyFileMetaData
+        self, texts: List[FileText], file_metadata: MyFileMetaData, chunking=True
     ):
         """Combine creation and adding of text chunks"""
         if not texts:
             return None
 
-        text_chunking_output = self._create_text_chunks(texts, file_metadata)
+        text_chunking_output = self._create_text_chunks(
+            texts, file_metadata, chunking=chunking
+        )
         input_texts, input_metadatas = (
             text_chunking_output["texts"],
             text_chunking_output["metadatas"],
@@ -244,8 +259,12 @@ class Pipeline:
                 file_metadata: MyFileMetaData = create_file_upload_metadata(file)
                 logger.info(f"Created file upload metadata: {file_metadata}")
                 num_pages = len(doc.pages)
-                extraction = extract_texts_and_images(doc, report=True)
-                texts, images = extraction["texts"], extraction["images"]
+                extraction = extract_texts_images_tables(doc, report=True)
+                texts, images, tables = (
+                    extraction["texts"],
+                    extraction["images"],
+                    extraction["tables"],
+                )
                 logger.info("Extracted raw texts and images")
 
             summary = ""
@@ -260,6 +279,12 @@ class Pipeline:
             if texts:
                 tasks["text"] = asyncio.create_task(
                     self._create_and_add_text_chunks(texts, file_metadata)
+                )
+            if tables:
+                tasks["text"] = asyncio.create_task(
+                    self._create_and_add_text_chunks(
+                        tables, file_metadata, chunking=False
+                    )
                 )
 
             # Wait for summary before processing images
@@ -322,6 +347,7 @@ class Pipeline:
             )
         except Exception as e:
             logger.error(f"Fatal error processing {file_name}: {str(e)}")
+            raise
             return ProcessingResult(
                 file_name=file_name,
                 num_pages=0,

@@ -6,14 +6,15 @@ while maintaining page information
 import base64
 import io
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Union
 
 from loguru import logger
 from pdfplumber.page import Page
 from pdfplumber.pdf import PDF as Doc
 from pydantic import BaseModel
 
-from src.pdf_utils import get_images_as_base64, page_extract_tables_md
+from src.pdf_utils import (get_images_as_base64, page_extract_tables_md,
+                           pdf_doc_is_ppt, pdf_page_is_landscape)
 
 
 class FileText(BaseModel):
@@ -68,14 +69,6 @@ class PageStats:
         )
 
 
-def doc_is_ppt(pdf: Doc) -> bool:
-    """Return True if pdf document is a PowerPoint export"""
-    metadata = pdf.metadata
-    return any(
-        "PowerPoint" in metadata.get(field, "") for field in ["Creator", "Producer"]
-    )
-
-
 def page_to_base64(page: Page, format: str = "PNG", scale: int = 2) -> str:
     """Convert whole page to base64 image"""
     # Convert page to image using pdfplumber's native method
@@ -112,18 +105,18 @@ def is_infographic_page(page: Page) -> bool:
 
 def process_page_as_an_image(
     page: Page, page_no: int, stats: PageStats
-) -> Tuple[List[FileText], List[FileImage]]:
+) -> Dict[str, Union[List[FileText], List[FileImage]]]:
     """Process a page like the whole page is an image"""
     page_image = FileImage(
         page_no=page_no, image_no=page_no, image_base64=page_to_base64(page, scale=2)
     )
     stats.update(has_text=False, has_images=True)
-    return [], [page_image]
+    return {"texts": [], "images": [page_image]}
 
 
 def process_regular_page(
     page: Page, page_no: int, stats: PageStats
-) -> Tuple[List[FileText], List[FileImage]]:
+) -> Dict[str, Union[List[FileText], List[FileImage]]]:
     """Process regular PDF page with text and images"""
     if is_infographic_page(page):
         logger.info(
@@ -131,10 +124,16 @@ def process_regular_page(
         )
         return process_page_as_an_image(page, page_no, stats)
 
+    if pdf_page_is_landscape(page):
+        logger.info(
+            f"Page {page_no} has landscape layout and will be treated as an image"
+        )
+        return process_page_as_an_image(page, page_no, stats)
+
     text = page.extract_text()
-    tables = "\n\n".join(page_extract_tables_md(page))
-    text += tables
+    tables = page_extract_tables_md(page)
     images_base64 = get_images_as_base64(page)
+    tables = [FileText(page_no=page_no, text=tab) for tab in tables]
 
     if not text:
         if images_base64:
@@ -144,7 +143,7 @@ def process_regular_page(
             return process_page_as_an_image(page, page_no, stats)
         else:
             logger.info(f"Page {page_no} contains no elements and will be skipped")
-            return [], []
+            return {"texts": [], "images": [], "tables": tables}
 
     # Process text and images
     texts = [FileText(page_no=page_no, text=text)]
@@ -154,23 +153,33 @@ def process_regular_page(
     ]
 
     stats.update(has_text=bool(text), has_images=bool(images))
-    return texts, images
+    return {"texts": texts, "images": images, "tables": tables}
 
 
-def extract_texts_and_images(doc: Doc, report: bool = False) -> Dict:
+def extract_texts_images_tables(doc: Doc, report: bool = False) -> Dict:
     """Extract texts and images from PDF document"""
     stats = PageStats()
     all_texts: List[FileText] = []
+    all_tables: List[FileText] = []
     all_images: List[FileImage] = []
 
-    process_fn = process_page_as_an_image if doc_is_ppt(doc) else process_regular_page
+    process_fn = (
+        process_page_as_an_image if pdf_doc_is_ppt(doc) else process_regular_page
+    )
 
     for page_no, page in enumerate(doc.pages):
-        texts, images = process_fn(page, page_no, stats)
+        result = process_fn(page, page_no, stats)
+
+        texts, images, tables = (
+            result["texts"],
+            result["images"],
+            result.get("tables", []),
+        )
         all_texts.extend(texts)
         all_images.extend(images)
+        all_tables.extend(tables)
 
     if report:
         stats.log_summary(doc.metadata)
 
-    return {"texts": all_texts, "images": all_images}
+    return {"texts": all_texts, "images": all_images, "tables": all_tables}
