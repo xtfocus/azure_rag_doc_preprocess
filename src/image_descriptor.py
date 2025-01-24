@@ -22,6 +22,7 @@ class ImageDescriptor:
             temperature = self.config.temperature
 
         try:
+            logger.debug("create image description request")
             response = await self.client.chat.completions.create(
                 model=self.config.MODEL_DEPLOYMENT,
                 temperature=temperature,
@@ -49,7 +50,9 @@ class ImageDescriptor:
             )
         except Exception as e:
             logger.error(str(e))
-            with open("error_image.txt", "w") as h:
-                h.write(base64_data)
+            # with open("error_image.txt", "w") as h:
+            #     h.write(base64_data)
             raise
+
+        logger.debug("finish image description request")
         return response.choices[0].message.content

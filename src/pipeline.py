@@ -103,7 +103,7 @@ class Pipeline:
         self.image_container_client = image_container_client
 
     async def _process_images(
-        self, images: List[FileImage], summary: str, max_concurrent_requests: int = 30
+        self, images: List[FileImage], summary: str, max_concurrent_requests: int = 20
     ) -> List[str]:
         """Process multiple images concurrently with rate limiting using a semaphore."""
         semaphore = asyncio.Semaphore(max_concurrent_requests)
@@ -181,6 +181,7 @@ class Pipeline:
         if not texts:
             return None
 
+        logger.debug("Start Indexing text chunks")
         text_chunking_output = self._create_text_chunks(
             texts, file_metadata, chunking=chunking
         )
@@ -188,9 +189,11 @@ class Pipeline:
             text_chunking_output["texts"],
             text_chunking_output["metadatas"],
         )
-        return await self.text_vector_store.add_entries(
+        result = await self.text_vector_store.add_entries(
             texts=input_texts, metadatas=input_metadatas
         )
+        logger.debug("Finish Indexing text chunks")
+        return result
 
     async def _create_and_add_image_chunks(
         self,
@@ -298,6 +301,7 @@ class Pipeline:
             except Exception as e:
                 logger.error(f"Summary generation failed: {str(e)}")
                 errors.append(f"Summary generation failed: {str(e)}")
+                raise e
 
             # Process images if available
             if images:
@@ -347,7 +351,6 @@ class Pipeline:
             )
         except Exception as e:
             logger.error(f"Fatal error processing {file_name}: {str(e)}")
-            raise
             return ProcessingResult(
                 file_name=file_name,
                 num_pages=0,

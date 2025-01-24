@@ -152,7 +152,7 @@ class AzureContainerClient(BaseAzureContainerClient):
         else:
             encoded_metadata = None
 
-        logger.debug(encoded_metadata)
+        # logger.debug(encoded_metadata)
         try:
             for blob_name, base64_image in zip(blob_names, base64_images):
                 image_data = base64.b64decode(base64_image)

@@ -26,7 +26,7 @@ class FileSummarizer:
         return [items[0]] + random.sample(items[1:], (max_samples - 1))
 
     def _create_message_content(
-        self, images: List[str], texts: List[str]
+        self, images: List[FileImage], texts: List[str]
     ) -> List[Dict]:
         """
         Create the message content for the API call.
@@ -75,7 +75,7 @@ class FileSummarizer:
         sampled_texts = self._sample_items(texts, self.max_samples)
 
         logger.info(
-            f"Creating summary with a sample of: {sampled_texts} text chunks and {sampled_images} images"
+            f"Creating summary with a sample of: {len(sampled_texts)} text chunks and {len(sampled_images)} images"
         )
 
         # Set temperature
@@ -83,13 +83,24 @@ class FileSummarizer:
             temperature = self.config.temperature
 
         # Create API call content
-        message_content = self._create_message_content(sampled_images, sampled_texts)
-
-        # Make API call
-        response = await self.client.chat.completions.create(
-            model=self.config.MODEL_DEPLOYMENT,
-            temperature=temperature,
-            messages=[{"role": "user", "content": message_content}],
+        message_content = self._create_message_content(
+            sampled_images,
+            sampled_texts,
         )
+
+        logger.debug(f"create summarizer request")
+        try:
+            # Make API call
+            response = await self.client.chat.completions.create(
+                model=self.config.MODEL_DEPLOYMENT,
+                temperature=temperature,
+                messages=[{"role": "user", "content": message_content}],
+            )
+        except Exception as e:
+            logger.error(str(e))
+            raise
+
+        logger.info(f"Token usage: {response.model_dump()['usage']}")
+        logger.debug(f"finish summarizer request")
 
         return response.choices[0].message.content
