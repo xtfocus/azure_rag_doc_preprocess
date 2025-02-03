@@ -1,6 +1,6 @@
 import base64
 import io
-from typing import List
+from typing import Dict, List
 
 import pdfplumber
 from loguru import logger
@@ -8,12 +8,46 @@ from pdfplumber.page import Page
 from pdfplumber.pdf import PDF as Doc
 
 
-def pdf_doc_is_ppt(pdf: Doc) -> bool:
+def get_page_drawings_stats(page: Page) -> Dict[str, int]:
+    """Count drawings by type: curve, line, quad, rectangle"""
+
+    lines = page.lines
+    hlines = [l for l in lines if l["y0"] == l["y1"]]
+    vlines = [l for l in lines if l["x0"] == l["x1"]]
+    return {
+        "c": len(page.curves),
+        "hl": len(hlines),
+        "vl": len(vlines),
+        "re": len(page.rects),
+    }
+
+
+def is_infographic_page(page: Page) -> bool:
+    """Check if page contains multiple visual components"""
+    stats = get_page_drawings_stats(page)
+    n_elements = sum(v for k, v in stats.items() if k in ("vl", "c"))
+    n_elements += len(page.images)
+    return n_elements >= 9
+
+
+def doc_exported_from_ppt(pdf: Doc) -> bool:
     """Return True if pdf document is a PowerPoint export"""
     metadata = pdf.metadata
     return any(
         "PowerPoint" in metadata.get(field, "") for field in ["Creator", "Producer"]
     )
+
+
+def page_to_base64(page: Page, format: str = "PNG", scale: int = 2) -> str:
+    """Convert whole page to base64 image"""
+    # Convert page to image using pdfplumber's native method
+    img = page.to_image(resolution=72 * scale)
+
+    # Get the image as bytes
+    img_buffer = io.BytesIO()
+    img.original.save(img_buffer, format=format)
+
+    return base64.b64encode(img_buffer.getvalue()).decode()
 
 
 def pdf_page_is_landscape(page: Page, ratio=1.2) -> bool:

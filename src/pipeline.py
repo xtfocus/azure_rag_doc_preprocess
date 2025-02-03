@@ -1,16 +1,19 @@
 import asyncio
-from typing import Any, Callable, Dict, List, NamedTuple, Optional
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Union
 
 from loguru import logger
-from pydantic import Base64Str
 
 from src.azure_container_client import AzureContainerClient
+from src.docx_parsing import docx_extract_texts_and_images
 from src.file_summarizer import FileSummarizer
+from src.file_utils import detect_file_type
 from src.image_descriptor import ImageDescriptor
-from src.models import BaseChunk, MyFile, MyFileMetaData, PageRange
-from src.pdf_parsing import FileImage, FileText, extract_texts_images_tables
-from src.pdf_utils import pdf_blob_to_pdfplumber_doc
+from src.image_utils import image_file_extract
+from src.models import (BaseChunk, FileImage, FileText, MyFile, MyFileMetaData,
+                        PageRange)
+from src.pdf_utils.pdf_parsing import pdf_extract_texts_and_images
 from src.splitters import SimplePageTextSplitter
+from src.txt_utils import txt_extract_texts
 from src.upload_metadata import create_file_upload_metadata
 from src.vector_stores import MyAzureSearch
 
@@ -103,12 +106,12 @@ class Pipeline:
         self.image_container_client = image_container_client
 
     async def _process_images(
-        self, images: List[FileImage], summary: str, max_concurrent_requests: int = 20
+        self, images: List[FileImage], summary, max_concurrent_requests: int = 30
     ) -> List[str]:
         """Process multiple images concurrently with rate limiting using a semaphore."""
         semaphore = asyncio.Semaphore(max_concurrent_requests)
 
-        async def process_single_image(image) -> str:
+        async def process_single_image(image):
             async with semaphore:
                 return await self.image_descriptor.run(image.image_base64, summary)
 
@@ -181,7 +184,6 @@ class Pipeline:
         if not texts:
             return None
 
-        logger.debug("Start Indexing text chunks")
         text_chunking_output = self._create_text_chunks(
             texts, file_metadata, chunking=chunking
         )
@@ -192,7 +194,6 @@ class Pipeline:
         result = await self.text_vector_store.add_entries(
             texts=input_texts, metadatas=input_metadatas
         )
-        logger.debug("Finish Indexing text chunks")
         return result
 
     async def _create_and_add_image_chunks(
@@ -248,6 +249,28 @@ class Pipeline:
             texts=summary_texts, metadatas=summary_metadatas
         )
 
+    @staticmethod
+    def extract_texts_and_images(
+        file: MyFile,
+    ) -> Dict[str, Union[List[FileText], List[FileImage]]]:
+        extraction: Dict = {"texts": [], "images": [], "num_pages": None}
+
+        file_type: str = detect_file_type(file.file_content)
+
+        logger.debug(f"File type {file_type} detected")
+        if file_type == "pdf":
+            extraction = pdf_extract_texts_and_images(file.file_content)
+        elif file_type == "docx":
+            extraction = docx_extract_texts_and_images(file.file_content)
+        elif file_type == "txt":
+            extraction = txt_extract_texts(file.file_content)
+        elif file_type in ("jpg", "jpeg", "png"):
+            extraction = image_file_extract(file.file_content)
+        else:
+            raise ValueError(f"File type {file_type} not supported")
+
+        return extraction
+
     async def process_file(self, file: MyFile) -> ProcessingResult:
         """Process a single file through the pipeline with optimized concurrent operations"""
 
@@ -256,19 +279,19 @@ class Pipeline:
         try:
             texts: List[FileText] = []
             images: List[FileImage] = []
+            num_pages: int = 0
+
             # Convert PDF to document
-            with pdf_blob_to_pdfplumber_doc(file.file_content) as doc:
-                # Create file metadata
-                file_metadata: MyFileMetaData = create_file_upload_metadata(file)
-                logger.info(f"Created file upload metadata: {file_metadata}")
-                num_pages = len(doc.pages)
-                extraction = extract_texts_images_tables(doc, report=True)
-                texts, images, tables = (
-                    extraction["texts"],
-                    extraction["images"],
-                    extraction["tables"],
-                )
-                logger.info("Extracted raw texts and images")
+            file_metadata: MyFileMetaData = create_file_upload_metadata(file)
+            logger.info(f"Created file upload metadata: {file_metadata}")
+            content_extraction_result = self.extract_texts_and_images(file)
+            texts, images, tables, num_pages = (
+                content_extraction_result["texts"],
+                content_extraction_result["images"],
+                content_extraction_result["tables"],
+                content_extraction_result.get("num_pages", 0),
+            )
+            logger.info("Extracted raw texts and images")
 
             summary = ""
             # Create tasks dict to track all async operations
@@ -299,8 +322,9 @@ class Pipeline:
                         self._add_file_summary_to_store(summary, file_metadata)
                     )
             except Exception as e:
-                logger.error(f"Summary generation failed: {str(e)}")
-                errors.append(f"Summary generation failed: {str(e)}")
+                error_msg = f"Summary generation failed: {str(e)}"
+                logger.error(error_msg)
+                errors.append(error_msg)
                 raise e
 
             # Process images if available
@@ -329,15 +353,17 @@ class Pipeline:
                     )
 
                 except Exception as e:
-                    logger.error(f"Image processing failed: {str(e)}")
-                    errors.append(f"Image processing failed: {str(e)}")
+                    error_msg = f"Image Processing failed: {str(e)}"
+                    logger.error(error_msg)
+                    errors.append(error_msg)
 
             # Wait for all remaining tasks to complete
             try:
                 await asyncio.gather(*tasks.values())
             except Exception as e:
-                logger.error(f"Task completion error: {str(e)}")
-                errors.append(f"Task completion error: {str(e)}")
+                error_msg = f"Task completion error: {str(e)}"
+                logger.error(error_msg)
+                errors.append(error_msg)
 
             logger.info(f"Processed file {file_name}")
 

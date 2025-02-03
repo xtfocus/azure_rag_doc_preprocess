@@ -10,7 +10,7 @@ from loguru import logger
 from src import task_counter
 from src.azure_container_client import AzureContainerClient
 from src.models import MyFile
-from src.pdf_utils import pdf_blob_to_pdfplumber_doc
+from src.pdf_utils.pdf_utils import pdf_blob_to_pdfplumber_doc
 from src.task_counter import TaskCounter
 
 from .globals import clients, objects
@@ -506,7 +506,7 @@ async def run_retrieve_by_file_name(file_name: str):
     return result
 
 
-@router.get("/api/exec/get_file_metadata/")
+@router.get("/api/exec/get_pdf_file_metadata/")
 async def get_file_metadata(container_name: str, file_name: str):
     # Define clients
     blob_container_client = AzureContainerClient(

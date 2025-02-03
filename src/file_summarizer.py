@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 from loguru import logger
 from openai import AsyncAzureOpenAI
 
-from src.pdf_parsing import FileImage
+from src.models import FileImage
 
 
 class FileSummarizer:
