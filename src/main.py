@@ -1,8 +1,9 @@
 import asyncio
 import os
 from collections.abc import Iterable
-from typing import Any, Callable, List
+from typing import Any, Callable, Dict, List
 
+import httpx
 from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException,
                      UploadFile)
 from loguru import logger
@@ -11,9 +12,10 @@ from src import task_counter
 from src.azure_container_client import AzureContainerClient
 from src.models import MyFile
 from src.pdf_utils.pdf_utils import pdf_blob_to_pdfplumber_doc
+from src.pipeline import ProcessingResult
 from src.task_counter import TaskCounter
 
-from .globals import clients, objects
+from .globals import clients, configs, objects
 
 router = APIRouter()
 
@@ -21,6 +23,34 @@ router = APIRouter()
 background_results = {}
 
 task_counter = TaskCounter()
+
+
+async def send_webhook_notification(
+    username: str, file_name: str, status: str, result: Dict = None
+):
+    """Send webhook notification about file processing status."""
+
+    WEBHOOK_URL = configs["app_config"].WEBHOOK_URL
+    if not WEBHOOK_URL:
+        logger.warning("WEBHOOK_URL not configured, skipping notification")
+        return
+
+    payload = {
+        "preferredUsername": username,
+        "blobName": file_name,
+        "status": status,
+        "departmentId": 0,
+    }
+
+    logger.info(f"Sending payload\n{payload}")
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.put(WEBHOOK_URL, json=payload)
+            logger.debug(response)
+            response.raise_for_status()
+    except Exception as e:
+        logger.error(f"Failed to send webhook notification for {file_name}: {str(e)}\n")
 
 
 async def ensure_no_active_tasks():
@@ -145,6 +175,11 @@ async def reindex_file(
         objects["pipeline"],
     )
 
+    await send_webhook_notification(
+        username="default",
+        file_name=file_name,
+        status="IN_PROGRESS",
+    )
     return {
         "message": f"Reindexing of file '{file_name}' in container '{container_name}' started."
     }
@@ -182,6 +217,9 @@ async def reindex_file_background(
         # Log success
         logger.info(
             f"Reindexing complete for file '{file_name}' in container '{container_name}': {result}"
+        )
+        await send_webhook_notification(
+            username="default", file_name=file_name, status="READY", result=result
         )
     except Exception as e:
         # Log the error
@@ -264,7 +302,17 @@ async def process_blob(
             file = MyFile(file_name=blob_name, file_content=file_content)
 
             # Process the file
-            result = await pipeline.process_file(file)
+            result: ProcessingResult = await pipeline.process_file(file)
+            if not ProcessingResult.errors:
+                status = "READY"
+            else:
+                status = "ERROR"
+            await send_webhook_notification(
+                username="default",
+                file_name=blob_name,
+                status=status,
+                result=result,
+            )
 
             duplicate_checker.update(file_name=blob_name)
             duplicate_checker.save()

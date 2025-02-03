@@ -44,3 +44,4 @@ class ModelConfig:
     IMAGE_INDEX_NAME = os.getenv("IMAGE_INDEX_NAME", "my-image-index")
     SUMMARY_INDEX_NAME = os.getenv("SUMMARY_INDEX_NAME", "my-summary-index")
     IMAGE_CONTAINER_NAME = os.getenv("IMAGE_CONTAINER_NAME", "my-image-container")
+    WEBHOOK_URL = os.getenv("WEBHOOK_URL")

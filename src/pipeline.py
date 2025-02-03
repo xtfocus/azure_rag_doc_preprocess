@@ -325,7 +325,6 @@ class Pipeline:
                 error_msg = f"Summary generation failed: {str(e)}"
                 logger.error(error_msg)
                 errors.append(error_msg)
-                raise e
 
             # Process images if available
             if images:

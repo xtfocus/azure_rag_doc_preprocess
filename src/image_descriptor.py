@@ -22,7 +22,6 @@ class ImageDescriptor:
             temperature = self.config.temperature
 
         try:
-            logger.debug("create image description request")
             response = await self.client.chat.completions.create(
                 model=self.config.MODEL_DEPLOYMENT,
                 temperature=temperature,
@@ -54,5 +53,4 @@ class ImageDescriptor:
             #     h.write(base64_data)
             raise
 
-        logger.debug("finish image description request")
         return response.choices[0].message.content
