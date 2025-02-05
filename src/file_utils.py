@@ -91,19 +91,38 @@ def detect_file_type(file_bytes: bytes) -> str:
     # Text-based formats (CSV, TXT)
     try:
         sample = file_bytes[:1024]
-        encoding = chardet.detect(sample)
-        if encoding["encoding"] and encoding["confidence"] > 0.9:
-            text = sample.decode(encoding["encoding"])
+        # Try UTF-8 first for better compatibility
+        try:
+            text = sample.decode("utf-8")
+        except UnicodeDecodeError:
+            # Fallback to chardet detection
+            encoding = chardet.detect(sample)
+            if (
+                encoding["encoding"] and encoding["confidence"] > 0.7
+            ):  # Lower confidence threshold
+                text = sample.decode(encoding["encoding"], errors="replace")
+            else:
+                return "unknown"
 
-            # Check for CSV
-            if "," in text.splitlines()[0]:
+        # Check for CSV (more robust check)
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if len(lines) > 0:
+            if all(
+                len(line.split(",")) > 1 for line in lines[:3]
+            ):  # Check multiple lines
                 return "csv"
 
-            # Check for general text
-            printable_ratio = sum(c.isprintable() for c in text) / len(text)
-            if printable_ratio > 0.95:
-                return "txt"
-    except:
+        # Improved text validation
+        acceptable_chars = sum(
+            c.isprintable() or c.isspace()  # Count spaces/newlines as valid
+            for c in text
+        )
+        total_chars = max(len(text), 1)  # Avoid division by zero
+
+        if (acceptable_chars / total_chars) > 0.8:  # Lower threshold
+            return "txt"
+
+    except Exception:
         pass
 
     return "unknown"
