@@ -228,6 +228,7 @@ class Pipeline:
     async def _add_file_summary_to_store(
         self, summary: str, file_metadata: MyFileMetaData
     ):
+        logger.debug(f"file_metadata = {file_metadata}")
         """Add the summary to vector store"""
         summary_output = self.summary_vector_store.create_texts_and_metadatas(
             [
@@ -276,6 +277,7 @@ class Pipeline:
 
         errors = []
         file_name = file.file_name
+
         try:
             texts: List[FileText] = []
             images: List[FileImage] = []

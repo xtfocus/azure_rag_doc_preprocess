@@ -7,7 +7,6 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 
-
 class MyFile(BaseModel):
     file_name: str
     file_content: bytes
@@ -19,14 +18,16 @@ class FileText(BaseModel):
     """
     Represents a page of text
     """
+
     page_no: int
     text: str
+
 
 class FileIndexingRequest(BaseModel):
     file_name: str
     blob_container_name: str
+    uploader: str = "default"
     dept_name: str = "default"
-
 
 
 class FileImage(BaseModel):
@@ -102,12 +103,13 @@ class BaseChunk(BaseModel):
 
 
 class MyFileMetaData(BaseModel):
-    """Represents the metadata for a file"""
+    """Represents the metadata for a file in Azure Search Vector DB"""
 
     file_hash: str
     title: str
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     uploader: str
+    dept_name: str
 
 
 class AzureSearchDocMetaData(BaseModel):
@@ -119,6 +121,8 @@ class AzureSearchDocMetaData(BaseModel):
     metadata: str = Field(description="JSON serialized metadata")
     parent_id: str = Field(description="ID of the parent document")
     title: str = Field(description="Title of the document")
+    uploader: str = Field(description="Uploader of the document")
+    dept_name: str = Field(description="Department of the document")
 
     @classmethod
     def from_chunk(
@@ -133,6 +137,8 @@ class AzureSearchDocMetaData(BaseModel):
                 metadata=json.dumps({"page_range": chunk.page_range.dict()}),
                 parent_id=file_metadata.file_hash,
                 title=file_metadata.title,
+                uploader=file_metadata.uploader,
+                dept_name=file_metadata.dept_name,
             )
         except Exception as e:
             raise

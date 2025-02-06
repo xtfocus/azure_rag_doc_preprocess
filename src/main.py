@@ -108,6 +108,7 @@ async def reindex_file(
         reindex_file_background,
         indexing_request.blob_container_name,
         indexing_request.file_name,
+        indexing_request.uploader,
         indexing_request.dept_name,
         blob_container_client,
         objects["pipeline"],
@@ -127,6 +128,7 @@ async def reindex_file(
 async def reindex_file_background(
     container_name: str,
     file_name: str,
+    uploader: str,
     dept_name: str,
     blob_container_client,
     pipeline,
@@ -149,7 +151,10 @@ async def reindex_file_background(
 
         # Create a MyFile instance
         file = MyFile(
-            file_name=file_name, file_content=file_content, dept_name=dept_name
+            file_name=file_name,
+            file_content=file_content,
+            dept_name=dept_name,
+            uploader=uploader,
         )
 
         # Process the file
@@ -173,7 +178,7 @@ async def reindex_file_background(
 async def search_client_filter_file(file_name: str, search_client) -> Iterable:
     """ """
     # Get file name without extension for title matching
-    title = os.path.splitext(file_name)[0]
+    title = file_name
     filter_expr = f"title eq '{title}'"
     search_results = await asyncio.to_thread(
         search_client.search,
@@ -208,7 +213,7 @@ async def remove_file(
             search_term = file_name
         else:
             # Get file name without extension for title matching
-            title = os.path.splitext(file_name)[0]
+            title = file_name
             filter_expr = f"title eq '{title}'"
             search_term = title
 
@@ -276,7 +281,7 @@ async def remove_file_endpoint(
 
     Args:
         file_name: Name of the file whose documents should be removed
-        use_parent_id: If True, filter by parent_id instead of title
+        use_parent_id: If True, filter by parent_id instead of title (here title and file name is the same)
 
     Returns:
         Result of the removal operation from all search clients and blob storage
@@ -303,7 +308,7 @@ async def remove_file_endpoint(
             filter=(
                 f"parent_id eq '{file_name}'"
                 if use_parent_id
-                else f"title eq '{os.path.splitext(file_name)[0]}'"
+                else f"title eq '{file_name}'"
             ),
             select=["chunk_id"],
         )

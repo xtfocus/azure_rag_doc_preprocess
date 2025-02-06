@@ -58,6 +58,12 @@ def get_fields(azure_openai_embedding_dimensions: int):
             filterable=True,
         ),
         SimpleField(
+            name="uploader",  # uploader name
+            type=SearchFieldDataType.String,
+            filterable=True,
+            sortable=True,
+        ),
+        SimpleField(
             name="dept_name",  # Department name
             type=SearchFieldDataType.String,
             filterable=True,
