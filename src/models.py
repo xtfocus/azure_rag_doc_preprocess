@@ -1,25 +1,32 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from loguru import logger
 from pydantic import BaseModel, Field
+
 
 
 class MyFile(BaseModel):
     file_name: str
     file_content: bytes
     uploader: str = "default"
+    dept_name: str = "default"
 
 
 class FileText(BaseModel):
     """
     Represents a page of text
     """
-
     page_no: int
     text: str
+
+class FileIndexingRequest(BaseModel):
+    file_name: str
+    blob_container_name: str
+    dept_name: str = "default"
+
 
 
 class FileImage(BaseModel):

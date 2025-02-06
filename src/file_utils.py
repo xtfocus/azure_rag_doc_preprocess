@@ -20,9 +20,7 @@ def create_file_metadata_from_bytes(
     Returns:
     - dict: Metadata dictionary containing the document title, file name, and SHA-256 hash.
     """
-    # If title is not provided, infer it from the file_name
-    if title is None:
-        title = path.splitext(file_name)[0]
+    title = file_name
 
     # Calculate SHA-256 hash to uniquely identify the file
     sha256_hash = hashlib.sha256()
