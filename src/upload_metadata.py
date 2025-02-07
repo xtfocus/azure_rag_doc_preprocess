@@ -14,6 +14,7 @@ def create_file_upload_metadata(file: MyFile) -> MyFileMetaData:
     file_metadata = create_file_metadata_from_bytes(
         file_bytes=file.file_content,
         file_name=file.file_name,
+        semantic_name=file.semantic_name,
     )
     file_metadata.update(dict(uploader=file.uploader))
     return MyFileMetaData.model_validate(file_metadata)

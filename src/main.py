@@ -43,12 +43,15 @@ async def send_webhook_notification(
 
 
 async def process_user_file_background(
-    username: str, file_name: str, file_content: bytes, pipeline
+    username: str, file_name: str, semantic_name: str, file_content: bytes, pipeline
 ):
     """Background task to process a single file."""
     try:
         my_file = MyFile(
-            file_name=file_name, file_content=file_content, uploader=username
+            file_name=file_name,
+            file_content=file_content,
+            uploader=username,
+            semantic_name=semantic_name,
         )
 
         # Process the file using the pipeline
@@ -106,6 +109,7 @@ async def process_user_file(
             process_user_file_background,
             user_upload_request.username,
             user_upload_request.blob_name,
+            user_upload_request.semantic_name,
             file_content,
             pipeline,
         )

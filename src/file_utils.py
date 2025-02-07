@@ -5,7 +5,9 @@ from zipfile import ZipFile
 import chardet
 
 
-def create_file_metadata_from_bytes(file_bytes: bytes, file_name: str) -> dict:
+def create_file_metadata_from_bytes(
+    file_bytes: bytes, file_name: str, semantic_name: str
+) -> dict:
     """
     Create metadata for a document file using the file contents in bytes.
 
@@ -27,6 +29,7 @@ def create_file_metadata_from_bytes(file_bytes: bytes, file_name: str) -> dict:
     return {
         "title": title,
         "file": file_name,
+        "semantic_name": semantic_name,
         "file_hash": file_hash,
     }
 

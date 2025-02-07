@@ -11,6 +11,7 @@ class MyFile(BaseModel):
     file_name: str
     file_content: bytes
     uploader: str = "default"
+    semantic_name: str
 
 
 class FileText(BaseModel):
@@ -101,6 +102,7 @@ class MyFileMetaData(BaseModel):
     title: str
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     uploader: str
+    semantic_name: str
 
 
 class AzureSearchDocMetaData(BaseModel):
@@ -113,6 +115,7 @@ class AzureSearchDocMetaData(BaseModel):
     parent_id: str = Field(description="ID of the parent document")
     title: str = Field(description="Title of the document")
     uploader: str = Field(description="Uploader of the document")
+    semantic_name: str = Field(description="Name of the file to be shown to user")
 
     @classmethod
     def from_chunk(
@@ -127,12 +130,14 @@ class AzureSearchDocMetaData(BaseModel):
             parent_id=file_metadata.file_hash,
             title=file_metadata.title,
             uploader=file_metadata.uploader,
+            semantic_name=file_metadata.semantic_name,
         )
 
 
 class UserUploadRequest(BaseModel):
     username: str
     blob_name: str
+    semantic_name: str
     container_name: str
 
 
