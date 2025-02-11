@@ -2,8 +2,13 @@ import random
 from typing import Any, Dict, List
 
 from openai import AsyncAzureOpenAI
+from pydantic import BaseModel
 
 from src.models import FileImage
+
+
+class FileSummaryResponse(BaseModel):
+    file_summary: str
 
 
 class FileSummarizer:
@@ -81,10 +86,13 @@ class FileSummarizer:
         message_content = self._create_message_content(sampled_images, sampled_texts)
 
         # Make API call
-        response = await self.client.chat.completions.create(
+        response = await self.client.beta.chat.completions.parse(
             model=self.config.MODEL_DEPLOYMENT,
             temperature=temperature,
+            response_format=FileSummaryResponse,
             messages=[{"role": "user", "content": message_content}],
         )
 
-        return response.choices[0].message.content
+        # Parse response
+        data = response.choices[0].message.parsed
+        return data.file_summary

@@ -1,6 +1,11 @@
 from typing import Any
 
 from openai import AsyncAzureOpenAI
+from pydantic import BaseModel
+
+
+class ImageDescription(BaseModel):
+    image_description: str
 
 
 class ImageDescriptor:
@@ -20,8 +25,9 @@ class ImageDescriptor:
         if not temperature:
             temperature = self.config.temperature
 
-        response = await self.client.chat.completions.create(
+        response = await self.client.beta.chat.completions.parse(
             model=self.config.MODEL_DEPLOYMENT,
+            response_format=ImageDescription,
             temperature=temperature,
             messages=[
                 {
@@ -45,4 +51,7 @@ class ImageDescriptor:
                 }
             ],
         )
-        return response.choices[0].message.content
+
+        # Parse response
+        data = response.choices[0].message.parsed
+        return data.image_description
