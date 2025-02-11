@@ -7,7 +7,7 @@ from src.azure_container_client import AzureContainerClient
 from src.docx_parsing import docx_extract_texts_and_images
 from src.file_summarizer import FileSummarizer
 from src.file_utils import detect_file_type
-from src.image_descriptor import ImageDescriptor
+from src.image_descriptor import ImageDescription, ImageDescriptor
 from src.image_file_parsing import image_file_extract
 from src.models import (BaseChunk, FileImage, FileText, MyFile, MyFileMetaData,
                         PageRange)
@@ -107,7 +107,7 @@ class Pipeline:
 
     async def _process_images(
         self, images: List[FileImage], summary, max_concurrent_requests: int = 30
-    ) -> List[str]:
+    ) -> List[ImageDescription]:
         """Process multiple images concurrently with rate limiting using a semaphore."""
         semaphore = asyncio.Semaphore(max_concurrent_requests)
 
@@ -184,15 +184,33 @@ class Pipeline:
     async def _create_and_add_image_chunks(
         self,
         images: List[FileImage],
-        descriptions: List[str],
+        descriptions: List[ImageDescription],
         file_metadata: MyFileMetaData,
     ) -> Dict[str, Any]:
-        """Combine creation and adding of image chunks"""
+        """
+        Combine creation and adding of image chunks
+        Remove chunk that are not of interest
+        """
         if not images:
             return {"status": "no_images", "image_metadatas": []}
 
+        REMOVE_IMAGES = ["logo", "shape", "icon"]  # This should be declared in a config
+        # Filter images and descriptions based on image_type
+        filtered_images = []
+        filtered_descriptions = []
+        for image, description in zip(images, descriptions):
+            if description.image_type not in REMOVE_IMAGES:
+                filtered_images.append(image)
+                filtered_descriptions.append(description.image_description)
+
+            else:
+                logger.debug(f"removed {description.image_type}")
+
+        if not filtered_images:
+            return {"status": "no_relevant_images", "image_metadatas": []}
+
         image_chunking_output = self._create_image_chunks(
-            images, descriptions, file_metadata
+            filtered_images, filtered_descriptions, file_metadata
         )
         image_texts, image_metadatas = (
             image_chunking_output["texts"],
@@ -299,7 +317,7 @@ class Pipeline:
             # Process images if available
             if images:
                 try:
-                    descriptions: List[str] = await self._process_images(
+                    descriptions: List[ImageDescription] = await self._process_images(
                         images,
                         summary=summary,
                     )

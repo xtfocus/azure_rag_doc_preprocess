@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 
 class ImageDescription(BaseModel):
+    image_type: Literal["icon", "shape", "logo", "picture", "information"]
     image_description: str
 
 
@@ -54,4 +55,4 @@ class ImageDescriptor:
 
         # Parse response
         data = response.choices[0].message.parsed
-        return data.image_description
+        return data
