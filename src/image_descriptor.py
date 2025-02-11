@@ -1,7 +1,11 @@
 from typing import Any
 
-from loguru import logger
 from openai import AsyncAzureOpenAI
+from pydantic import BaseModel
+
+
+class ImageDescription(BaseModel):
+    image_description: str
 
 
 class ImageDescriptor:
@@ -14,43 +18,40 @@ class ImageDescriptor:
         self.config = config
         self.prompt = prompt
 
-    async def run(self, base64_data: str, summary: str, temperature=None) -> str:
+    async def run(self, base64_data: str, summary: str, temperature=None):
         """
         base64_data: base64 str
         """
         if not temperature:
             temperature = self.config.temperature
 
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.config.MODEL_DEPLOYMENT,
-                temperature=temperature,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": self.prompt,
+        response = await self.client.beta.chat.completions.parse(
+            model=self.config.MODEL_DEPLOYMENT,
+            response_format=ImageDescription,
+            temperature=temperature,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": self.prompt,
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_data}"
                             },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{base64_data}"
-                                },
-                            },
-                            {
-                                "type": "text",
-                                "text": f"For context, the image above is extracted from  a document having description as follows: {summary}",
-                            },
-                        ],
-                    }
-                ],
-            )
-        except Exception as e:
-            logger.error(str(e))
-            # with open("error_image.txt", "w") as h:
-            #     h.write(base64_data)
-            raise
+                        },
+                        {
+                            "type": "text",
+                            "text": f"For context, the image above is extracted from  a document having description as follows: {summary}",
+                        },
+                    ],
+                }
+            ],
+        )
 
-        return response.choices[0].message.content
+        # Parse response
+        data = response.choices[0].message.parsed
+        return data.image_description
