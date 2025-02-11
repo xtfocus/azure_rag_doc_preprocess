@@ -218,6 +218,9 @@ class Pipeline:
                 filtered_images.append(image)
                 filtered_descriptions.append(description.image_description)
 
+            else:
+                logger.debug(f"removed {description.image_type}")
+
         if not filtered_images:
             return {"status": "no_relevant_images", "image_metadatas": []}
 
