@@ -1,10 +1,11 @@
-from typing import Any
+from typing import Any, Literal
 
 from openai import AsyncAzureOpenAI
 from pydantic import BaseModel
 
 
 class ImageDescription(BaseModel):
+    image_type: Literal["icon", "shape", "logo", "picture", "information"]
     image_description: str
 
 
@@ -18,7 +19,9 @@ class ImageDescriptor:
         self.config = config
         self.prompt = prompt
 
-    async def run(self, base64_data: str, summary: str, temperature=None):
+    async def run(
+        self, base64_data: str, summary: str, temperature=None
+    ) -> ImageDescription | None:
         """
         base64_data: base64 str
         """
@@ -54,4 +57,4 @@ class ImageDescriptor:
 
         # Parse response
         data = response.choices[0].message.parsed
-        return data.image_description
+        return data

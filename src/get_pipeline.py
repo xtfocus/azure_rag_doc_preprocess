@@ -67,37 +67,29 @@ def get_pipeline(
         
         Objective: Transform the provided image of a document into text form without information loss.
         
-        Instructions:
-        
-            Detect if the image carry no information of interest:
-              + if the image is a simple shape (e.g.,. line, boxes,), simply return 'a shape' then terminate.
-              + if the image is a logo, simply return 'a logo' then terminate.
-              + No further processing needed. Simply terminate
-            Otherwise:
-                Examine the Image: Carefully look at the document to identify sections, headings, and any structured information.
-                Transcribe the Text: Write down all the text from the image as accurately as possible. Pay attention to details like numbers, dates, and specific terms. If tables exists, transcribe them in valid Markdown tables (consistent column count between headers and data)
-                Identify Key Elements:
-                    Note the name of the organization or company involved.
-                    Highlight every specific terms, conditions, or numerical data.
-                    Pay attention to dates, names, and signatures that might indicate the document’s purpose or validity period.
-                Review for Accuracy: Double-check your transcription for any errors or omissions to ensure completeness.
-                Submit Your Work: Provide the transcribed text in a clear and organized format.
-                By completing this task, you will help capture the detailed content and context of the document.
+        Instructions: Detect image type AND Create image description
+            1. Detect image type: available type include: "icon", "shape", "logo", "picture", "information" where:
+              + "shape" applies to simple shapes such as lines, boxes, curves, etc.
+              + "information" applies to documents, diagrams, or infographic
+              + "picture" applies to pictures of things, except icons, shapes, logos
+              + "icon" and "logo" are self-explanatory
+
+            2. Create description
+            If image type if one of "icon", "shape", "logo", leave image description blank
+            Otherwise (for "document" and "picture"):
+                - Examine the Image: Carefully look at the document to identify sections, headings, and any structured information.
+                - Identify Key Elements:
+                    + Note the name of the organization or company involved.
+                    + Highlight every specific terms, conditions, or numerical data.
+                    + Pay attention to dates, names, and signatures that might indicate the document’s purpose or validity period.
+                - Produce output: 
+                    + If the image is a document, simply write down all the text from the image as accurately as possible. Pay attention to details like numbers, dates, and specific terms. If tables exists, transcribe them in valid Markdown tables (consistent column count between headers and data). Stay true to the source material, do not include introduction or commentary. 
+                    + If the image is a picture, describe it in details
+
+        Review for Accuracy: Double-check your transcription for any errors or omissions to ensure completeness.
+        Submit Your Work: Provide the transcribed text in a clear and organized format.
+        By completing this task, you will help capture the detailed content and context of the document.
         """,
-        # """Transform the content of the uploaded image into a detailed and meaningful text for Q&A purpose.
-        # You must follow these rules:
-        # - Detect if the image carry no information of interest:
-        #     + if the image is a simple shape (e.g.,. line, boxes,), simply return 'a shape' then terminate.
-        #     + if the image is a logo, simply return 'a logo' then terminate.
-        #     + No further processing needed. Simply terminate
-        # - Otherwise, transform the image to text
-        #     + Output in Japanese, Markdown format
-        #     + Use a clear, natural tone.
-        #     + Tables (if exists) must be convert to meaningful paragraphs
-        #     + Preserve all numeric values and quantities in the final output. Explain their meaning.
-        #     + In the end, generate a list of 10 QA pairs with explicit scoping.
-        #     + Be specific. Summarization is forbidden because it results in information loss.
-        # - Refrain from providing your own additional commentaries or thought process.""",
     )
 
     my_embedding_function = MyAzureOpenAIEmbeddings(
