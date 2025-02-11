@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from openai import AsyncAzureOpenAI
 from pydantic import BaseModel
