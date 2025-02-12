@@ -1,19 +1,14 @@
 import asyncio
-import os
 from collections.abc import Iterable
-from typing import Any, Callable, Dict
+from typing import Dict
 
 import httpx
-from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException,
-                     UploadFile)
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from loguru import logger
 
-from src import task_counter
 from src.azure_container_client import AzureContainerClient
 from src.models import FileIndexingRequest, MyFile
 from src.pdf_utils.pdf_utils import pdf_blob_to_pdfplumber_doc
-from src.pipeline import ProcessingResult
-from src.task_counter import TaskCounter
 
 from .globals import clients, configs, objects
 
@@ -21,8 +16,6 @@ router = APIRouter()
 
 # Shared results store (use a more robust storage mechanism in production)
 background_results = {}
-
-task_counter = TaskCounter()
 
 
 async def send_webhook_notification(
@@ -53,39 +46,10 @@ async def send_webhook_notification(
         logger.error(f"Failed to send webhook notification for {file_name}: {str(e)}\n")
 
 
-async def ensure_no_active_tasks():
-    """
-    Dependency that checks if there are any active background tasks.
-    """
-
-    if task_counter.is_busy:
-        raise HTTPException(
-            status_code=409,
-            detail=f"There are {task_counter.active_tasks} background tasks still running. Please try again later.",
-        )
-    yield
-
-
-def run_with_task_counter(func: Callable[..., Any]) -> Callable[..., Any]:
-    """
-    Decorator to wrap a function with task counter increment and decrement logic.
-    """
-
-    async def wrapper(*args, **kwargs):
-        task_counter.increment()
-        try:
-            return await func(*args, **kwargs)
-        finally:
-            task_counter.decrement()
-
-    return wrapper
-
-
 @router.post("/api/exec/reindex/")
 async def reindex_file(
     indexing_request: FileIndexingRequest,
     background_tasks: BackgroundTasks,
-    _: None = Depends(ensure_no_active_tasks),
 ):
     """
     Reindex a single file from a specified Azure Blob Storage container in the background.
@@ -124,7 +88,6 @@ async def reindex_file(
     }
 
 
-@run_with_task_counter
 async def reindex_file_background(
     container_name: str,
     file_name: str,
@@ -273,7 +236,6 @@ async def remove_file(
 async def remove_file_endpoint(
     file_name: str,
     use_parent_id: bool = False,
-    _: None = Depends(ensure_no_active_tasks),
 ):
     """
     Remove all documents associated with a file from multiple Azure Search clients
