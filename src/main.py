@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from loguru import logger
 
 from src.azure_container_client import AzureContainerClient
-from src.models import FileIndexingRequest, MyFile
+from src.models import FileDeleteRequest, FileIndexingRequest, MyFile
 from src.pdf_utils.pdf_utils import pdf_blob_to_pdfplumber_doc
 
 from .globals import clients, configs, objects
@@ -81,7 +81,7 @@ async def reindex_file(
     await send_webhook_notification(
         username="default",
         file_name=indexing_request.file_name,
-        status="IN_PROGRESS",
+        status="PROCESSING",
     )
     return {
         "message": f"Reindexing of file '{indexing_request.file_name}' in container '{indexing_request.blob_container_name}' started."
@@ -128,12 +128,16 @@ async def reindex_file_background(
             f"Reindexing complete for file '{file_name}' in container '{container_name}': {result}"
         )
         await send_webhook_notification(
-            username="default", file_name=file_name, status="READY", result=result
+            username="default", file_name=file_name, status="INDEXED", result=result
         )
     except Exception as e:
         # Log the error
         logger.error(
             f"Error during reindexing of file '{file_name}' in container '{container_name}': {str(e)}"
+        )
+
+        await send_webhook_notification(
+            username="default", file_name=file_name, status="ERROR", result=result
         )
         raise
 
@@ -153,33 +157,19 @@ async def search_client_filter_file(file_name: str, search_client) -> Iterable:
     return list(search_results)
 
 
-async def remove_file(
-    file_name: str, search_client, use_parent_id: bool = False
-) -> dict:
+async def remove_file(filter_expr: str, search_client) -> dict:
     """
     Remove all documents from Azure Search where either:
     - title exactly matches the file name (without extension), or
-    - parent_id exactly matches the file name (with extension)
 
     Args:
         file_name: Name of the file to remove (with extension)
         search_client: Azure Search client instance
-        use_parent_id: If True, filter by parent_id instead of title
 
     Returns:
         dict: Result of the removal operation including number of documents removed
     """
     try:
-        if use_parent_id:
-            # Use the full file name as parent_id
-            filter_expr = f"parent_id eq '{file_name}'"
-            search_term = file_name
-        else:
-            # Get file name without extension for title matching
-            title = file_name
-            filter_expr = f"title eq '{title}'"
-            search_term = title
-
         # Search for documents with exact match using OData filter
         search_results = await asyncio.to_thread(
             search_client.search,
@@ -194,13 +184,11 @@ async def remove_file(
             chunk_ids.append(result["chunk_id"])
 
         if not chunk_ids:
-            field_type = "parent_id" if use_parent_id else "title"
-            logger.warning(f"No documents found with {field_type} '{search_term}'")
+            logger.warning(f"No documents found with filter {filter_expr}")
             return {
-                "file_name": file_name,
+                "filter": filter_expr,
                 "status": "no_documents_found",
                 "documents_removed": 0,
-                "filter_type": field_type,
             }
 
         # Delete documents in batches
@@ -215,27 +203,26 @@ async def remove_file(
                 ],
             )
 
-        field_type = "parent_id" if use_parent_id else "title"
         logger.info(
-            f"Successfully removed {len(chunk_ids)} documents for file '{file_name}' using {field_type} filter"
+            f"Successfully removed {len(chunk_ids)} documents for filter '{filter_expr}'"
         )
         return {
-            "file_name": file_name,
+            "filter": filter_expr,
             "status": "success",
             "documents_removed": len(chunk_ids),
-            "filter_type": field_type,
         }
 
     except Exception as e:
-        error_msg = f"Error removing documents for file '{file_name}': {str(e)}"
+        error_msg = (
+            f"Error removing documents with filter_expr '{filter_expr}': {str(e)}"
+        )
         logger.error(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
 
 
 @router.delete("/api/exec/remove_file/")
 async def remove_file_endpoint(
-    file_name: str,
-    use_parent_id: bool = False,
+    delete_request: FileDeleteRequest,
 ):
     """
     Remove all documents associated with a file from multiple Azure Search clients
@@ -243,7 +230,6 @@ async def remove_file_endpoint(
 
     Args:
         file_name: Name of the file whose documents should be removed
-        use_parent_id: If True, filter by parent_id instead of title (here title and file name is the same)
 
     Returns:
         Result of the removal operation from all search clients and blob storage
@@ -254,6 +240,11 @@ async def remove_file_endpoint(
         clients["summary-azure-ai-search"],
     ]
 
+    file_name = delete_request.file_name
+    blob_container_name = delete_request.blob_container_name
+    uploader: str = delete_request.uploader
+    dept_name: str = delete_request.dept_name
+
     results = []
     total_removed = 0
     deleted_blobs = []
@@ -262,16 +253,14 @@ async def remove_file_endpoint(
     image_search_client = clients["image-azure-ai-search"]
     image_container_client = clients["image_container_client"]
 
+    filter_expr = f"title eq '{file_name}' and (dept_name eq '{dept_name}')"
+
     try:
         # Get all chunk_ids from the image search results before any deletion
         search_results = await asyncio.to_thread(
             image_search_client.search,
             search_text="*",
-            filter=(
-                f"parent_id eq '{file_name}'"
-                if use_parent_id
-                else f"title eq '{file_name}'"
-            ),
+            filter=filter_expr,
             select=["chunk_id"],
         )
 
@@ -303,7 +292,7 @@ async def remove_file_endpoint(
     # Then process each search client
     for client in search_clients:
         try:
-            result = await remove_file(file_name, client, use_parent_id)
+            result = await remove_file(filter_expr, client)
             results.append(result)
             total_removed += result["documents_removed"]
 
