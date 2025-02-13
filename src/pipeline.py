@@ -1,5 +1,6 @@
 import asyncio
-from typing import Any, Callable, Dict, List, NamedTuple, Optional, Union
+from typing import (Any, Callable, Dict, List, NamedTuple, Optional, TypedDict,
+                    Union)
 
 from loguru import logger
 
@@ -18,7 +19,7 @@ from src.upload_metadata import create_file_upload_metadata
 from src.vector_stores import MyAzureSearch
 
 
-class ProcessingResult(NamedTuple):
+class ProcessingResult(TypedDict):
     """Structured return type for process_file method"""
 
     file_name: str
@@ -26,7 +27,7 @@ class ProcessingResult(NamedTuple):
     num_texts: int
     num_images: int
     metadata: Any
-    errors: Optional[List[str]] = None
+    errors: Optional[List[str]]
 
 
 class ProcessingError(Exception):
@@ -306,9 +307,9 @@ class Pipeline:
             logger.info(f"Created file upload metadata: {file_metadata}")
             content_extraction_result = self.extract_texts_and_images(file)
             texts, images, tables, num_pages = (
-                content_extraction_result["texts"],
-                content_extraction_result["images"],
-                content_extraction_result["tables"],
+                content_extraction_result.get("texts", []),
+                content_extraction_result.get("images", []),
+                content_extraction_result.get("tables", []),
                 content_extraction_result.get("num_pages", 0),
             )
             logger.info("Extracted raw texts and images")
@@ -327,7 +328,7 @@ class Pipeline:
                     self._create_and_add_text_chunks(texts, file_metadata)
                 )
             if tables:
-                tasks["text"] = asyncio.create_task(
+                tasks["tables"] = asyncio.create_task(
                     self._create_and_add_text_chunks(
                         tables, file_metadata, chunking=False
                     )
@@ -392,10 +393,12 @@ class Pipeline:
                 num_texts=len(texts),
                 num_images=len(images),
                 metadata=file_metadata,
-                errors=errors if errors else None,
+                errors=errors if errors else [],
             )
         except Exception as e:
             logger.error(f"Fatal error processing {file_name}: {str(e)}")
+            raise
+
             return ProcessingResult(
                 file_name=file_name,
                 num_pages=0,

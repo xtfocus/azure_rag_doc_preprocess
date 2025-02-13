@@ -33,7 +33,7 @@ class FileIndexingRequest(BaseModel):
 class FileDeleteRequest(BaseModel):
     file_name: str
     blob_container_name: str
-    uploader: str = "default"
+    username: str = "default"
     dept_name: str = "default"
 
 

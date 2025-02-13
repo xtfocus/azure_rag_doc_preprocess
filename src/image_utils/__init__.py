@@ -28,5 +28,4 @@ def image_file_extract(file_content: bytes) -> Dict[str, List]:
                 image_base64=base64.b64encode(file_content).decode("utf-8"),
             )
         ],
-        "texts": [],
     }

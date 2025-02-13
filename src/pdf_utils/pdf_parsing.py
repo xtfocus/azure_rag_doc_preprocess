@@ -105,6 +105,7 @@ def pdfplumber_extract_texts_and_images(doc: Doc, report: bool = False) -> Dict:
 def pdf_extract_texts_and_images(file_content: bytes) -> Dict:
     texts = []
     images = []
+    tables = []
     num_pages = None
     with pdf_blob_to_pdfplumber_doc(file_content) as doc:
         # Create file metadata

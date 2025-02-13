@@ -24,6 +24,7 @@ async def send_webhook_notification(
     """Send webhook notification about file processing status."""
 
     WEBHOOK_URL = configs["app_config"].WEBHOOK_URL
+
     if not WEBHOOK_URL:
         logger.warning("WEBHOOK_URL not configured, skipping notification")
         return
@@ -39,6 +40,7 @@ async def send_webhook_notification(
 
     try:
         async with httpx.AsyncClient() as client:
+            logger.debug(f"Sending to {WEBHOOK_URL}: {payload}")
             response = await client.put(WEBHOOK_URL, json=payload)
             logger.debug(response)
             response.raise_for_status()
@@ -79,9 +81,10 @@ async def reindex_file(
     )
 
     await send_webhook_notification(
-        username="default",
+        username=indexing_request.uploader,
         file_name=indexing_request.file_name,
         status="PROCESSING",
+        result={},
     )
     return {
         "message": f"Reindexing of file '{indexing_request.file_name}' in container '{indexing_request.blob_container_name}' started."
@@ -112,12 +115,22 @@ async def reindex_file_background(
             blob_container_client.download_file, file_name
         )
 
+        if not isinstance(file_content, bytes):
+            raise ValueError(f"Error downloading file {file_name}")
+
         # Create a MyFile instance
         file = MyFile(
             file_name=file_name,
             file_content=file_content,
             dept_name=dept_name,
             uploader=uploader,
+        )
+
+        await send_webhook_notification(
+            username=uploader,
+            file_name=file_name,
+            status="PROCESSING",
+            result={},
         )
 
         # Process the file
@@ -127,9 +140,14 @@ async def reindex_file_background(
         logger.info(
             f"Reindexing complete for file '{file_name}' in container '{container_name}': {result}"
         )
-        await send_webhook_notification(
-            username="default", file_name=file_name, status="INDEXED", result=result
-        )
+        if not result["errors"]:
+            await send_webhook_notification(
+                username=uploader, file_name=file_name, status="INDEXED", result=result
+            )
+        else:
+            await send_webhook_notification(
+                username=uploader, file_name=file_name, status="ERROR", result=result
+            )
     except Exception as e:
         # Log the error
         logger.error(
@@ -137,7 +155,7 @@ async def reindex_file_background(
         )
 
         await send_webhook_notification(
-            username="default", file_name=file_name, status="ERROR", result=result
+            username=uploader, file_name=file_name, status="ERROR", result={"error": e}
         )
         raise
 
@@ -242,7 +260,7 @@ async def remove_file_endpoint(
 
     file_name = delete_request.file_name
     blob_container_name = delete_request.blob_container_name
-    uploader: str = delete_request.uploader
+    username: str = delete_request.username
     dept_name: str = delete_request.dept_name
 
     results = []
@@ -307,6 +325,13 @@ async def remove_file_endpoint(
                     "documents_removed": 0,
                 }
             )
+
+    await send_webhook_notification(
+        username=username,
+        file_name=file_name,
+        status="DELETED",
+        result={},
+    )
 
     return {
         "file_name": file_name,
