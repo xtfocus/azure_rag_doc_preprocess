@@ -9,6 +9,7 @@ from loguru import logger
 from src.azure_container_client import AzureContainerClient
 from src.models import FileDeleteRequest, FileIndexingRequest, MyFile
 from src.pdf_utils.pdf_utils import pdf_blob_to_pdfplumber_doc
+from src.pipeline import Pipeline
 
 from .globals import clients, configs, objects
 
@@ -96,8 +97,8 @@ async def reindex_file_background(
     file_name: str,
     uploader: str,
     dept_name: str,
-    blob_container_client,
-    pipeline,
+    blob_container_client: AzureContainerClient,
+    pipeline: Pipeline,
 ):
     """
     Background task to reindex a single file from an Azure Blob Storage container.
