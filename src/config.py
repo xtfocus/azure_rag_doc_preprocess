@@ -7,7 +7,7 @@ class ModelConfig:
     temperature: float = 0.0
     top_p: float = 0.95
     max_tokens: int = 4096
-    timeout: int = 30
+    timeout: int = 120
     retry_attempts: int = 3
     retry_delay: float = 0.5
 
