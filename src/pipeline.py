@@ -360,7 +360,7 @@ class Pipeline:
             try:
                 if "summary" in tasks:
                     summary = await tasks["summary"]
-                    logger.info(f"Created and index summary for {file_name}")
+                    logger.info(f"Created and indexed summary for {file_name}")
                     tasks["summary_upload"] = asyncio.create_task(
                         self._add_file_summary_to_store(summary, file_metadata)
                     )
