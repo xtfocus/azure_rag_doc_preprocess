@@ -104,8 +104,10 @@ class MyAzureSearch:
     ):
         """Adds texts and their associated metadata to the Azure Search index."""
         documents = []
+        n_texts = len(texts)
 
         for i in range(0, len(texts), batch_size):
+            logger.debug(f"working on {i}/{n_texts}")
             batch_texts = texts[i : i + batch_size]
             batch_metadatas = metadatas[i : i + batch_size]
 

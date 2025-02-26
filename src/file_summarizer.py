@@ -1,6 +1,7 @@
 import random
 from typing import Any, Dict, List
 
+from loguru import logger
 from openai import AsyncAzureOpenAI
 from pydantic import BaseModel
 
@@ -75,12 +76,17 @@ class FileSummarizer:
         """
 
         # Sample inputs if necessary
+        logger.info("Start sampling")
         sampled_images = self._sample_items(images, self.max_samples)
         sampled_texts = self._sample_items(texts, self.max_samples)
 
         # Set temperature
         if temperature is None:
             temperature = self.config.temperature
+
+        logger.info(
+            f"Creating summary with {len(sampled_texts)} chunks and {len(sampled_images)} images ..."
+        )
 
         # Create API call content
         message_content = self._create_message_content(sampled_images, sampled_texts)

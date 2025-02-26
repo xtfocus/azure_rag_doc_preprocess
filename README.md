@@ -11,3 +11,8 @@ Indexing:
 Retrieval (in my other repo):
 - [x] add image to selected context chunks
 - [x] file summary as the first retrieval round
+
+# Before pushing:
+
+- change dockerignore and Docker back to prod standard
+- limit openai access

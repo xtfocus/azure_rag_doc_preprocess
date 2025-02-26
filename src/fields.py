@@ -1,5 +1,3 @@
-from dataclasses import field
-
 from azure.search.documents.indexes.models import (SearchableField,
                                                    SearchField,
                                                    SearchFieldDataType,

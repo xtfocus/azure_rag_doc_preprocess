@@ -5,7 +5,8 @@ from typing import (Any, Callable, Dict, List, NamedTuple, Optional, TypedDict,
 from loguru import logger
 
 from src.azure_container_client import AzureContainerClient
-from src.docx_parsing import docx_extract_texts_and_images
+from src.docx_parsing import (doc_extract_texts_and_images,
+                              docx_extract_texts_and_images)
 from src.file_summarizer import FileSummarizer
 from src.file_utils import detect_file_type
 from src.image_descriptor import ImageDescription, ImageDescriptor
@@ -178,6 +179,13 @@ class Pipeline:
             image_chunks, file_metadata, prefix="image"
         )
 
+    async def _add_text_chunks(self, text_chunking_output):
+        result = await self.text_vector_store.add_entries(
+            texts=text_chunking_output["texts"],
+            metadatas=text_chunking_output["metadatas"],
+        )
+        return result
+
     async def _create_and_add_text_chunks(
         self, texts: List[FileText], file_metadata: MyFileMetaData, chunking=True
     ):
@@ -282,6 +290,8 @@ class Pipeline:
             extraction = pdf_extract_texts_and_images(file.file_content)
         elif file_type == "docx":
             extraction = docx_extract_texts_and_images(file.file_content)
+        elif file_type == "doc":
+            extraction = doc_extract_texts_and_images(file.file_content)
         elif file_type == "txt":
             extraction = txt_extract_texts(file.file_content)
         elif file_type in ("jpg", "jpeg", "png"):
@@ -317,15 +327,22 @@ class Pipeline:
             summary = ""
             # Create tasks dict to track all async operations
             tasks = {}
+
+            text_chunking_output = self._create_text_chunks(
+                texts, file_metadata, chunking=True
+            )
+
             # Start summary generation if we have content
             if texts or images:
                 tasks["summary"] = asyncio.create_task(
-                    self._create_summary([i.text for i in texts], images)
+                    self._create_summary(
+                        [i for i in text_chunking_output["texts"]], images
+                    )
                 )
             # Process texts if available
             if texts:
                 tasks["text"] = asyncio.create_task(
-                    self._create_and_add_text_chunks(texts, file_metadata)
+                    self._add_text_chunks(text_chunking_output)
                 )
             if tables:
                 tasks["tables"] = asyncio.create_task(
