@@ -76,7 +76,6 @@ class FileSummarizer:
         """
 
         # Sample inputs if necessary
-        logger.info("Start sampling")
         sampled_images = self._sample_items(images, self.max_samples)
         sampled_texts = self._sample_items(texts, self.max_samples)
 

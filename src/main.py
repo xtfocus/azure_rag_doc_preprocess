@@ -284,19 +284,41 @@ async def remove_file_endpoint(
         )
 
         # Delete all associated image files first
-        chunk_ids = []
-        for doc in search_results:
-            chunk_ids.append(doc["chunk_id"])
-            blob_name = f"{doc['chunk_id']}"  # Assuming blob name matches chunk_id
+        # Delete all associated image files concurrently
+        chunk_ids = [doc["chunk_id"] for doc in search_results]
+        blob_names = [f"{doc['chunk_id']}" for doc in search_results]
 
+        async def delete_blob(blob_name):
             if await asyncio.to_thread(image_container_client.delete_file, blob_name):
-                deleted_blobs.append(blob_name)
+                return blob_name
             else:
                 logger.warning(f"Failed to delete image file: {blob_name}")
+                return None
+
+        deleted_blobs = await asyncio.gather(
+            *(delete_blob(blob) for blob in blob_names)
+        )
+
+        # Remove failed deletions (None values)
+        deleted_blobs = [blob for blob in deleted_blobs if blob]
 
         logger.info(
             f"Deleted {len(deleted_blobs)} image files out of {len(chunk_ids)} found"
         )
+        #
+        #
+        # for doc in search_results:
+        #     chunk_ids.append(doc["chunk_id"])
+        #     blob_name = f"{doc['chunk_id']}"  # Assuming blob name matches chunk_id
+        #
+        #     if await asyncio.to_thread(image_container_client.delete_file, blob_name):
+        #         deleted_blobs.append(blob_name)
+        #     else:
+        #         logger.warning(f"Failed to delete image file: {blob_name}")
+        #
+        # logger.info(
+        #     f"Deleted {len(deleted_blobs)} image files out of {len(chunk_ids)} found"
+        # )
 
     except Exception as e:
         error_msg = f"Error handling image files: {str(e)}"

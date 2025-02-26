@@ -99,7 +99,7 @@ class MyAzureSearch:
         self,
         texts: List[str],
         metadatas: List[AzureSearchDocMetaData],
-        batch_size: int = 10,
+        batch_size: int = 500,
         filter_by_min_len: int = 0,
     ):
         """Adds texts and their associated metadata to the Azure Search index."""

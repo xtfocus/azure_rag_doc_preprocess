@@ -108,7 +108,7 @@ class Pipeline:
         self.image_container_client = image_container_client
 
     async def _process_images(
-        self, images: List[FileImage], summary, max_concurrent_requests: int = 30
+        self, images: List[FileImage], summary, max_concurrent_requests: int = 50
     ) -> List[ImageDescription | None]:
         """Process multiple images concurrently with rate limiting using a semaphore."""
         semaphore = asyncio.Semaphore(max_concurrent_requests)
@@ -315,7 +315,9 @@ class Pipeline:
             # Convert PDF to document
             file_metadata: MyFileMetaData = create_file_upload_metadata(file)
             logger.info(f"Created file upload metadata: {file_metadata}")
+
             content_extraction_result = self.extract_texts_and_images(file)
+
             texts, images, tables, num_pages = (
                 content_extraction_result.get("texts", []),
                 content_extraction_result.get("images", []),
@@ -323,6 +325,9 @@ class Pipeline:
                 content_extraction_result.get("num_pages", 0),
             )
             logger.info("Extracted raw texts and images")
+            logger.info(
+                f"no. texts: {len(texts)}\nno. images: {len(images)}\nno. tables: {len(tables)}\nno. pages: {num_pages}"
+            )
 
             summary = ""
             # Create tasks dict to track all async operations
@@ -355,7 +360,7 @@ class Pipeline:
             try:
                 if "summary" in tasks:
                     summary = await tasks["summary"]
-                    logger.info(f"Created summary for {file_name}")
+                    logger.info(f"Created and index summary for {file_name}")
                     tasks["summary_upload"] = asyncio.create_task(
                         self._add_file_summary_to_store(summary, file_metadata)
                     )
@@ -377,6 +382,7 @@ class Pipeline:
                     image_chunk_result = await self._create_and_add_image_chunks(
                         images, descriptions, file_metadata
                     )
+
                     image_metadatas = image_chunk_result["image_metadatas"]
 
                     logger.info(f"Created image index for {file_name}")

@@ -17,4 +17,4 @@ num_cpus = multiprocessing.cpu_count()
 workers = (num_cpus * 2) + 1
 worker_class = "uvicorn.workers.UvicornWorker"
 
-timeout = int(os.getenv("GUNICORN_TIMEOUT", 500))
+timeout = int(os.getenv("GUNICORN_TIMEOUT", 600))
