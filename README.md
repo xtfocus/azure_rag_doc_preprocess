@@ -13,6 +13,5 @@ Retrieval (in my other repo):
 - [x] file summary as the first retrieval round
 
 # Before pushing:
-
-- change dockerignore and Docker back to prod standard
+- Make sure `.dockerignore` and Dockerfile is up to prod standard
 - limit openai access

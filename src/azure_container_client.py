@@ -154,7 +154,10 @@ class AzureContainerClient(BaseAzureContainerClient):
 
         # logger.debug(encoded_metadata)
         try:
+            count = 0
+
             for blob_name, base64_image in zip(blob_names, base64_images):
+
                 image_data = base64.b64decode(base64_image)
                 # URL encode the blob name
                 encoded_blob_name = quote(blob_name)
@@ -171,8 +174,13 @@ class AzureContainerClient(BaseAzureContainerClient):
                     content_type="image/png",
                     metadata=encoded_metadata,
                 )
+                count += 1
 
-                logger.debug(f"Successfully uploaded blob: {blob_name}")
+                # logger.debug(f"Successfully uploaded blob: {blob_name}")
+
+            logger.debug(
+                f"Successfully uploaded all {count} image blobs, last one is: {encoded_blob_name}"
+            )
 
         except Exception as e:
             logger.error(f"Upload images error: {str(e)}")
