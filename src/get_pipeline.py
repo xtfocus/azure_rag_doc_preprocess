@@ -10,7 +10,10 @@ from src.vector_stores import MyAzureOpenAIEmbeddings
 
 
 def get_pipeline(
-    config, oai_client: AsyncAzureOpenAI, image_container_client: AzureContainerClient
+    config,
+    oai_client: AsyncAzureOpenAI,
+    image_container_client: AzureContainerClient,
+    pii_service_endpoint: str,
 ) -> Pipeline:
 
     vector_stores = get_vector_stores(config)
@@ -134,5 +137,6 @@ def get_pipeline(
         image_descriptor=image_descriptor,
         file_summarizer=file_summarizer,
         image_container_client=image_container_client,
+        pii_service_endpoint=pii_service_endpoint,
     )
     return pipeline

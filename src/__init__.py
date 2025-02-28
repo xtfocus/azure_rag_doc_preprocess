@@ -66,6 +66,7 @@ async def lifespan(app: fastapi.FastAPI):
         configs["app_config"],
         clients["chat-completion-model"],
         clients["image_container_client"],
+        pii_service_endpoint=config.PII_SERVICE_ENDPOINT,
     )
 
     # DUPLICATE CHEKER to avoid handling a processed file

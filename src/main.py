@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import Iterable
-from typing import Dict
+from typing import Dict, Optional
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -35,6 +35,7 @@ async def send_webhook_notification(
         "blobName": file_name,
         "status": status,
         "departmentId": 0,
+        "data": result,
     }
 
     logger.info(f"Sending payload\n{payload}")
@@ -53,6 +54,7 @@ async def send_webhook_notification(
 async def reindex_file(
     indexing_request: FileIndexingRequest,
     background_tasks: BackgroundTasks,
+    pii_scanning: Optional[bool] = False,
 ):
     """
     Reindex a single file from a specified Azure Blob Storage container in the background.
@@ -79,6 +81,7 @@ async def reindex_file(
         indexing_request.dept_name,
         blob_container_client,
         objects["pipeline"],
+        pii_scanning,
     )
 
     await send_webhook_notification(
@@ -99,6 +102,7 @@ async def reindex_file_background(
     dept_name: str,
     blob_container_client: AzureContainerClient,
     pipeline: Pipeline,
+    pii_scanning: bool,
 ):
     """
     Background task to reindex a single file from an Azure Blob Storage container.
@@ -135,7 +139,7 @@ async def reindex_file_background(
         )
 
         # Process the file
-        result = await pipeline.process_file(file)
+        result = await pipeline.process_file(file, pii_scanning)
 
         # Log success
         logger.info(

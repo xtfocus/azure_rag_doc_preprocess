@@ -14,6 +14,7 @@ from src.image_utils import image_file_extract
 from src.models import (BaseChunk, FileImage, FileText, MyFile, MyFileMetaData,
                         PageRange)
 from src.pdf_utils.pdf_parsing import pdf_extract_texts_and_images
+from src.pii_scanning import check_pii_async, check_sensitive_information
 from src.splitters import SimplePageTextSplitter
 from src.txt_utils import txt_extract_texts
 from src.upload_metadata import create_file_upload_metadata
@@ -87,6 +88,7 @@ class Pipeline:
         image_descriptor: ImageDescriptor,
         file_summarizer: FileSummarizer,
         image_container_client: AzureContainerClient,
+        pii_service_endpoint: str,
     ):
         """Initialize the pipeline with necessary components
 
@@ -106,6 +108,7 @@ class Pipeline:
         self.image_descriptor = image_descriptor
         self.file_summarizer = file_summarizer
         self.image_container_client = image_container_client
+        self.pii_service_endpoint = pii_service_endpoint
 
     async def _process_images(
         self, images: List[FileImage], summary, max_concurrent_requests: int = 50
@@ -301,7 +304,7 @@ class Pipeline:
 
         return extraction
 
-    async def process_file(self, file: MyFile) -> ProcessingResult:
+    async def process_file(self, file: MyFile, pii_scanning: bool) -> ProcessingResult:
         """Process a single file through the pipeline with optimized concurrent operations"""
 
         errors = []
@@ -332,6 +335,33 @@ class Pipeline:
             summary = ""
             # Create tasks dict to track all async operations
             tasks = {}
+
+            if pii_scanning:
+
+                ###### START SCANNING FOR SENSITIVE INFORMATION
+                logger.debug(f"Sending request to PII Scanning service ... ")
+
+                pii_scan_result = await check_pii_async(
+                    service_endpoint=self.pii_service_endpoint,
+                    documents=[
+                        dict(
+                            doc_name=file_name,
+                            doc_file_text=[i.model_dump() for i in texts],
+                            language="ja",  # Japanese
+                        )
+                    ],
+                )
+                logger.debug(pii_scan_result)
+
+                try:
+                    check_sensitive_information(pii_scan_result)
+                    logger.debug("PII Scanning completed without issues!")
+                except Exception as e:
+                    logger.error(
+                        f"PII Scanning found issues. Will not index this file: {file_name}. \n"
+                        + str(e)
+                    )
+                    raise e
 
             text_chunking_output = self._create_text_chunks(
                 texts, file_metadata, chunking=True
@@ -420,7 +450,7 @@ class Pipeline:
             )
         except Exception as e:
             logger.error(f"Fatal error processing {file_name}: {str(e)}")
-            raise
+            # raise
 
             return ProcessingResult(
                 file_name=file_name,

@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -161,3 +161,12 @@ class UserRemoveRequest(BaseModel):
     username: str
     blob_name: str
     container_name: str
+
+
+class SensitiveInformationDetectedException(Exception):
+    """Custom exception for detected sensitive information."""
+
+    def __init__(self, detected_data):
+        message = f"Sensitive information detected: {detected_data}"
+        super().__init__(message)
+        self.detected_data = detected_data

@@ -45,3 +45,5 @@ class ModelConfig:
     SUMMARY_INDEX_NAME = os.getenv("SUMMARY_INDEX_NAME", "my-summary-index")
     IMAGE_CONTAINER_NAME = os.getenv("IMAGE_CONTAINER_NAME", "my-image-container")
     WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+
+    PII_SERVICE_ENDPOINT = os.getenv("PII_SERVICE_ENDPOINT")

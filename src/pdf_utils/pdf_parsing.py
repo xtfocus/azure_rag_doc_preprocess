@@ -3,6 +3,7 @@ Define a pdf parser object that extract texts and images from doc
 while maintaining page information
 """
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Union
 
 from loguru import logger
@@ -72,7 +73,7 @@ def process_regular_pdf_page(
 
 
 def pdfplumber_extract_texts_and_images(doc: Doc, report: bool = False) -> Dict:
-    """Extract texts and images from PDF document"""
+    """Extract texts and images from PDF document using parallel processing"""
     stats = PageStats()
     all_texts: List[FileText] = []
     all_tables: List[FileText] = []
@@ -84,17 +85,18 @@ def pdfplumber_extract_texts_and_images(doc: Doc, report: bool = False) -> Dict:
         else process_regular_pdf_page
     )
 
-    for page_no, page in enumerate(doc.pages):
-        processing_output = process_fn(page, page_no, stats)
+    # Parallel processing
+    with ThreadPoolExecutor() as executor:
+        future_to_page = {
+            executor.submit(process_fn, page, page_no, stats): page_no
+            for page_no, page in enumerate(doc.pages)
+        }
 
-        texts, images, tables = (
-            processing_output["texts"],
-            processing_output["images"],
-            processing_output.get("tables", []),
-        )
-        all_texts.extend(texts)
-        all_images.extend(images)
-        all_tables.extend(tables)
+        for future in as_completed(future_to_page):
+            processing_output = future.result()
+            all_texts.extend(processing_output["texts"])
+            all_images.extend(processing_output["images"])
+            all_tables.extend(processing_output.get("tables", []))
 
     if report:
         stats.log_summary(doc.metadata)
