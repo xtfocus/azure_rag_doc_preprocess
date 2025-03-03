@@ -445,8 +445,8 @@ class Pipeline:
                 num_pages=num_pages,
                 num_texts=len(texts),
                 num_images=len(images),
-                metadata=file_metadata,
-                errors=errors if errors else [],
+                metadata=file_metadata,  # dict
+                errors=errors if errors else [],  # list[str]
             )
         except Exception as e:
             logger.error(f"Fatal error processing {file_name}: {str(e)}")

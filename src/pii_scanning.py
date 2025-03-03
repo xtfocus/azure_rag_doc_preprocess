@@ -30,10 +30,8 @@ def check_sensitive_information(pii_scan_result: Dict[str, Any]):
             for entity in entities:
                 detected_data.append(
                     {
-                        "doc_name": entry.get("doc_name"),
                         "text": entity.get("text"),
                         "category": entity.get("category"),
-                        "confidence_score": entity.get("confidence_score"),
                     }
                 )
 

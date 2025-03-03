@@ -3,6 +3,7 @@ Define a pdf parser object that extract texts and images from doc
 while maintaining page information
 """
 
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Union
 
@@ -73,7 +74,7 @@ def process_regular_pdf_page(
 
 
 def pdfplumber_extract_texts_and_images(doc: Doc, report: bool = False) -> Dict:
-    """Extract texts and images from PDF document using parallel processing"""
+    """Extract texts and images from a PDF document using controlled parallel processing"""
     stats = PageStats()
     all_texts: List[FileText] = []
     all_tables: List[FileText] = []
@@ -85,18 +86,24 @@ def pdfplumber_extract_texts_and_images(doc: Doc, report: bool = False) -> Dict:
         else process_regular_pdf_page
     )
 
-    # Parallel processing
-    with ThreadPoolExecutor() as executor:
-        future_to_page = {
-            executor.submit(process_fn, page, page_no, stats): page_no
-            for page_no, page in enumerate(doc.pages)
-        }
+    max_workers = min(4, os.cpu_count() or 1)  # Limit parallelism to avoid OOM
+    logger.info(f"Starts ThreadPoolExecutor with {max_workers} workers")
 
-        for future in as_completed(future_to_page):
-            processing_output = future.result()
+    try:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            results = executor.map(
+                lambda args: process_fn(*args),
+                [(page, page_no, stats) for page_no, page in enumerate(doc.pages)],
+            )
+
+        for processing_output in results:
             all_texts.extend(processing_output["texts"])
             all_images.extend(processing_output["images"])
             all_tables.extend(processing_output.get("tables", []))
+
+    except MemoryError:
+        print("MemoryError: Reducing concurrency may be required.")
+        raise
 
     if report:
         stats.log_summary(doc.metadata)
