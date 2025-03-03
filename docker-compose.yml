@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  azure_rag_doc_preprocess:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tung-ingest:v1.0.1
+    container_name: azure_rag_doc_preprocess
+    ports:
+      - "3100:3100"
+    env_file:
+      - .env.dev
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+    volumes:
+      - ./:/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3100/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

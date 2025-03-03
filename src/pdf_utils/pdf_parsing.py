@@ -88,6 +88,7 @@ def pdfplumber_extract_texts_and_images(doc: Doc, report: bool = False) -> Dict:
 
     max_workers = min(4, os.cpu_count() or 1)  # Limit parallelism to avoid OOM
     logger.info(f"Starts ThreadPoolExecutor with {max_workers} workers")
+    logger.info(f"number of pages = {len(doc.pages)}")
 
     try:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -119,6 +120,7 @@ def pdf_extract_texts_and_images(file_content: bytes) -> Dict:
     with pdf_blob_to_pdfplumber_doc(file_content) as doc:
         # Create file metadata
         num_pages = len(doc.pages)
+
         extraction = pdfplumber_extract_texts_and_images(doc, report=True)
         texts, images, tables = (
             extraction["texts"],

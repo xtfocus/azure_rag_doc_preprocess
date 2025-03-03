@@ -90,13 +90,26 @@ class FileSummarizer:
         # Create API call content
         message_content = self._create_message_content(sampled_images, sampled_texts)
 
-        # Make API call
-        response = await self.client.beta.chat.completions.parse(
-            model=self.config.MODEL_DEPLOYMENT,
-            temperature=temperature,
-            response_format=FileSummaryResponse,
-            messages=[{"role": "user", "content": message_content}],
-        )
+        try:
+            # Make API call
+            response = await self.client.beta.chat.completions.parse(
+                model=self.config.MODEL_DEPLOYMENT,
+                temperature=temperature,
+                response_format=FileSummaryResponse,
+                messages=[{"role": "user", "content": message_content}],
+            )
+        except Exception as e:
+            message_content = self._create_message_content([], sampled_texts)
+            logger.error(
+                "Error generating summary with images. Retrying without images"
+            )
+            # Make API call
+            response = await self.client.beta.chat.completions.parse(
+                model=self.config.MODEL_DEPLOYMENT,
+                temperature=temperature,
+                response_format=FileSummaryResponse,
+                messages=[{"role": "user", "content": message_content}],
+            )
 
         # Parse response
         data = response.choices[0].message.parsed

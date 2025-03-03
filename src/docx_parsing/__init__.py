@@ -80,7 +80,7 @@ def docx_extract_texts_and_images(file_content: bytes):
             table_md = table_to_markdown(block)
             if table_md:
                 markdown_content += "\n" + table_md
-                markdown_tables.append(table_md)
+                markdown_tables.append(FileText(text=table_md, page_no=0))
 
     # Extract images and drawings
     image_counter = 0

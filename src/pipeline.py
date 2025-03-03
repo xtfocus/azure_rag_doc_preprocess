@@ -450,7 +450,7 @@ class Pipeline:
             )
         except Exception as e:
             logger.error(f"Fatal error processing {file_name}: {str(e)}")
-            # raise
+            raise
 
             return ProcessingResult(
                 file_name=file_name,
