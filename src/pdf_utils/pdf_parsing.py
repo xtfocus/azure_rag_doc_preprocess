@@ -89,35 +89,23 @@ def pdfplumber_extract_texts_and_images(
     )
 
     total_pages = len(doc.pages)
-    logger.info(f"Processing PDF with {total_pages} pages in batches of {batch_size}")
+    logger.info(f"Processing PDF with {total_pages} pages")
 
-    # Process in batches to manage memory
-    for batch_start in range(0, total_pages, batch_size):
-        batch_end = min(batch_start + batch_size, total_pages)
-        logger.info(f"Processing batch: pages {batch_start} to {batch_end-1}")
+    # Process in batches to manage memo        # Process each page in the batch sequentially
+    for page_no in range(total_pages):
+        try:
+            page = doc.pages[page_no]
+            processing_output = process_fn(page, page_no, stats)
 
-        # Process each page in the batch sequentially
-        for page_no in range(batch_start, batch_end):
-            try:
-                page = doc.pages[page_no]
-                processing_output = process_fn(page, page_no, stats)
+            all_texts.extend(processing_output["texts"])
+            all_images.extend(processing_output["images"])
+            all_tables.extend(processing_output.get("tables", []))
 
-                all_texts.extend(processing_output["texts"])
-                all_images.extend(processing_output["images"])
-                all_tables.extend(processing_output.get("tables", []))
+            # Free the page reference explicitly
+            page = None
 
-                # Free the page reference explicitly
-                page = None
-
-            except Exception as e:
-                logger.error(f"Error processing page {page_no}: {str(e)}")
-                # Continue with next page instead of failing entire batch
-
-        # Force garbage collection after each batch
-        import gc
-
-        gc.collect()
-        logger.info(f"Completed batch {batch_start}-{batch_end-1}, memory cleaned")
+        except Exception as e:
+            logger.error(f"Error processing page {page_no}: {str(e)}")
 
     if report:
         stats.log_summary(doc.metadata)
