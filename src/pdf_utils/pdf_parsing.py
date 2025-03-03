@@ -73,8 +73,10 @@ def process_regular_pdf_page(
     return {"texts": texts, "images": images, "tables": tables}
 
 
-def pdfplumber_extract_texts_and_images(doc: Doc, report: bool = False) -> Dict:
-    """Extract texts and images from a PDF document using controlled parallel processing"""
+def pdfplumber_extract_texts_and_images(
+    doc: Doc, report: bool = False, batch_size: int = 100
+) -> Dict:
+    """Extract texts and images from a PDF document using sequential batch processing"""
     stats = PageStats()
     all_texts: List[FileText] = []
     all_tables: List[FileText] = []
@@ -86,25 +88,36 @@ def pdfplumber_extract_texts_and_images(doc: Doc, report: bool = False) -> Dict:
         else process_regular_pdf_page
     )
 
-    max_workers = min(4, os.cpu_count() or 1)  # Limit parallelism to avoid OOM
-    logger.info(f"Starts ThreadPoolExecutor with {max_workers} workers")
-    logger.info(f"number of pages = {len(doc.pages)}")
+    total_pages = len(doc.pages)
+    logger.info(f"Processing PDF with {total_pages} pages in batches of {batch_size}")
 
-    try:
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            results = executor.map(
-                lambda args: process_fn(*args),
-                [(page, page_no, stats) for page_no, page in enumerate(doc.pages)],
-            )
+    # Process in batches to manage memory
+    for batch_start in range(0, total_pages, batch_size):
+        batch_end = min(batch_start + batch_size, total_pages)
+        logger.info(f"Processing batch: pages {batch_start} to {batch_end-1}")
 
-        for processing_output in results:
-            all_texts.extend(processing_output["texts"])
-            all_images.extend(processing_output["images"])
-            all_tables.extend(processing_output.get("tables", []))
+        # Process each page in the batch sequentially
+        for page_no in range(batch_start, batch_end):
+            try:
+                page = doc.pages[page_no]
+                processing_output = process_fn(page, page_no, stats)
 
-    except MemoryError:
-        print("MemoryError: Reducing concurrency may be required.")
-        raise
+                all_texts.extend(processing_output["texts"])
+                all_images.extend(processing_output["images"])
+                all_tables.extend(processing_output.get("tables", []))
+
+                # Free the page reference explicitly
+                page = None
+
+            except Exception as e:
+                logger.error(f"Error processing page {page_no}: {str(e)}")
+                # Continue with next page instead of failing entire batch
+
+        # Force garbage collection after each batch
+        import gc
+
+        gc.collect()
+        logger.info(f"Completed batch {batch_start}-{batch_end-1}, memory cleaned")
 
     if report:
         stats.log_summary(doc.metadata)
