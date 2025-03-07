@@ -27,6 +27,7 @@ async def check_pii_async(
                 response = await client.post(
                     service_endpoint, json=documents, headers=headers
                 )
+                logger.debug(response.text)
                 response.raise_for_status()
                 return response.json()
         except (httpx.HTTPStatusError, httpx.RequestError) as e:
