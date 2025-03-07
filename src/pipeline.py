@@ -1,4 +1,6 @@
 import asyncio
+import gc
+import time
 from typing import (Any, Callable, Dict, List, NamedTuple, Optional, TypedDict,
                     Union)
 
@@ -12,8 +14,9 @@ from src.file_utils import detect_file_type
 from src.image_descriptor import ImageDescription, ImageDescriptor
 from src.image_utils import image_file_extract
 from src.models import (BaseChunk, FileImage, FileText, MyFile, MyFileMetaData,
-                        PageRange)
-from src.pdf_utils.pdf_parsing import pdf_extract_texts_and_images
+                        PageRange, SensitiveInformationDetectedException)
+from src.pdf_utils.pdf_parsing import (pdf_extract_texts_and_images,
+                                       pdf_extract_texts_and_images_batch)
 from src.pii_scanning import check_pii_async, check_sensitive_information
 from src.splitters import SimplePageTextSplitter
 from src.txt_utils import txt_extract_texts
@@ -29,7 +32,7 @@ class ProcessingResult(TypedDict):
     num_texts: int
     num_images: int
     metadata: Any
-    errors: Optional[List[str]]
+    errors: Optional[Dict[str, Any]]
 
 
 class ProcessingError(Exception):
@@ -304,6 +307,166 @@ class Pipeline:
 
         return extraction
 
+    async def process_file_pdf(
+        self, file: MyFile, pii_scanning: bool
+    ) -> ProcessingResult:
+        import gc
+
+        errors = []
+        file_name = file.file_name
+        file_metadata = create_file_upload_metadata(file)
+        summary = ""
+        batch_size = 500  # Adjust based on memory constraints
+
+        try:
+            extraction_gen = pdf_extract_texts_and_images_batch(
+                file.file_content, batch_size=batch_size
+            )
+            first_batch = next(extraction_gen)
+
+            # Generate summary from the first batch
+            if first_batch["texts"] or first_batch["images"]:
+                summary = await self._create_summary(
+                    [text.text for text in first_batch["texts"]], first_batch["images"]
+                )
+                logger.info(f"Generated summary from the first batch: {summary}")
+
+            # Process the first batch
+            await self._process_batch(
+                first_batch, file_metadata, summary, pii_scanning, errors
+            )
+
+            # Clean up first batch
+            try:
+                # Explicitly delete the first batch data
+                del first_batch["texts"]
+                del first_batch["images"]
+                del first_batch["tables"]
+                del first_batch
+                gc.collect()
+            except Exception as e:
+                logger.warning(f"Error cleaning up first batch: {e} ")
+
+            # Process remaining batches
+            for batch in extraction_gen:
+                await self._process_batch(
+                    batch, file_metadata, summary, pii_scanning, errors
+                )
+
+                try:
+                    # Explicitly delete the first batch data
+                    del batch["texts"]
+                    del batch["images"]
+                    del batch["tables"]
+                    del batch
+                    gc.collect()
+                except Exception as e:
+                    logger.warning(f"Error cleaning up first batch: {e} ")
+
+            return ProcessingResult(
+                file_name=file_name,
+                num_pages=0,
+                num_texts=0,
+                num_images=0,
+                metadata=file_metadata.model_dump(),
+                errors=errors if errors else [],
+            )
+
+        except Exception as e:
+            logger.error(f"Fatal error processing {file_name}: {str(e)}")
+            if isinstance(e, SensitiveInformationDetectedException):
+                error_type = "sensitive_information_detected"
+                error_data = e.detected_data
+
+            else:
+                error_type = "unclassified"
+                error_data = [str(e)]
+
+            return ProcessingResult(
+                file_name=file_name,
+                num_pages=0,
+                num_texts=0,
+                num_images=0,
+                metadata={},
+                errors={"error_type": error_type, "error_data": error_data},
+            )
+
+    async def _process_batch(self, batch, file_metadata, summary, pii_scanning, errors):
+        """Process a single batch of pages"""
+        texts = batch["texts"]
+        images = batch["images"]
+        tables = batch["tables"]
+
+        # PII Scanning (only for the first batch)
+        if pii_scanning:
+            logger.debug("scanning batch")
+            try:
+                pii_scan_result = await check_pii_async(
+                    service_endpoint=self.pii_service_endpoint,
+                    documents=[
+                        dict(
+                            doc_name=file_metadata.title,
+                            doc_file_text=[i.model_dump() for i in texts],
+                            language="ja",  # Japanese
+                        )
+                    ],
+                )
+                logger.debug(pii_scan_result)
+                detected_data = check_sensitive_information(pii_scan_result)
+
+            except Exception as e:
+                errors.append(f"PII scanning error: {str(e)}")
+                raise
+
+            if detected_data:
+                logger.error(
+                    f"PII Scanning found issues. Will not index this file: {file_metadata.title}. \n"
+                )
+                raise SensitiveInformationDetectedException(detected_data)
+
+        try:
+            await self._add_file_summary_to_store(summary, file_metadata)
+            logger.info("Indexed File Summary")
+        except Exception as e:
+            logger.error(f"Error indexing summary {e}")
+            raise
+
+        # Index texts
+        if texts:
+            try:
+                text_chunking_output = self._create_text_chunks(texts, file_metadata)
+                await self._add_text_chunks(text_chunking_output)
+            except Exception as e:
+                errors.append(f"Text indexing error: {str(e)}")
+
+        # Index tables
+        if tables:
+            try:
+                await self._create_and_add_text_chunks(
+                    tables, file_metadata, chunking=False
+                )
+            except Exception as e:
+                errors.append(f"Table indexing error: {str(e)}")
+
+        # Process images
+        if images:
+            try:
+                descriptions = await self._process_images(images, summary)
+                image_result = await self._create_and_add_image_chunks(
+                    images, descriptions, file_metadata
+                )
+                await self.image_container_client.upload_base64_image_to_blob(
+                    (meta.chunk_id for meta in image_result["image_metadatas"]),
+                    (img.image_base64 for img in images),
+                    file_metadata.model_dump(),
+                )
+            except Exception as e:
+                errors.append(f"Image processing error: {str(e)}")
+
+        # Free memory
+        del texts, images, tables
+        gc.collect()
+
     async def process_file(self, file: MyFile, pii_scanning: bool) -> ProcessingResult:
         """Process a single file through the pipeline with optimized concurrent operations"""
 
@@ -317,7 +480,24 @@ class Pipeline:
 
             # Convert PDF to document
             file_metadata: MyFileMetaData = create_file_upload_metadata(file)
+
             logger.info(f"Created file upload metadata: {file_metadata}")
+
+            file_type: str = detect_file_type(file.file_content)
+
+            logger.debug(f"File type {file_type} detected")
+            if file_type == "docx":
+                extraction = docx_extract_texts_and_images(file.file_content)
+            elif file_type == "doc":
+                extraction = doc_extract_texts_and_images(file.file_content)
+            elif file_type == "txt":
+                extraction = txt_extract_texts(file.file_content)
+            elif file_type in ("jpg", "jpeg", "png"):
+                extraction = image_file_extract(file.file_content)
+            elif file_type == "pdf":
+                return await self.process_file_pdf(file, pii_scanning)
+            else:
+                raise ValueError(f"File type {file_type} not supported")
 
             content_extraction_result = self.extract_texts_and_images(file)
 
@@ -338,30 +518,35 @@ class Pipeline:
 
             if pii_scanning:
 
-                ###### START SCANNING FOR SENSITIVE INFORMATION
-                logger.debug(f"Sending request to PII Scanning service ... ")
-
-                pii_scan_result = await check_pii_async(
-                    service_endpoint=self.pii_service_endpoint,
-                    documents=[
-                        dict(
-                            doc_name=file_name,
-                            doc_file_text=[i.model_dump() for i in texts],
-                            language="ja",  # Japanese
-                        )
-                    ],
-                )
-                logger.debug(pii_scan_result)
-
                 try:
-                    check_sensitive_information(pii_scan_result)
-                    logger.debug("PII Scanning completed without issues!")
+                    ###### START SCANNING FOR SENSITIVE INFORMATION
+                    logger.debug(f"Sending request to PII Scanning service ... ")
+
+                    pii_scan_result = await check_pii_async(
+                        service_endpoint=self.pii_service_endpoint,
+                        documents=[
+                            dict(
+                                doc_name=file_name,
+                                doc_file_text=[i.model_dump() for i in texts],
+                                language="ja",  # Japanese
+                            )
+                        ],
+                    )
+                    logger.debug(pii_scan_result)
+
+                    detected_data = check_sensitive_information(pii_scan_result)
+
                 except Exception as e:
                     logger.error(
-                        f"PII Scanning found issues. Will not index this file: {file_name}. \n"
-                        + str(e)
+                        f"PII PService Error: Failed to pii scan document with error {e}"
                     )
                     raise e
+
+                if detected_data:
+                    logger.error(
+                        f"PII Scanning found issues. Will not index this file: {file_name}. \n"
+                    )
+                    raise SensitiveInformationDetectedException(detected_data)
 
             text_chunking_output = self._create_text_chunks(
                 texts, file_metadata, chunking=True
@@ -445,12 +630,18 @@ class Pipeline:
                 num_pages=num_pages,
                 num_texts=len(texts),
                 num_images=len(images),
-                metadata=file_metadata,  # dict
+                metadata=file_metadata.model_dump(),  # dict
                 errors=errors if errors else [],  # list[str]
             )
         except Exception as e:
             logger.error(f"Fatal error processing {file_name}: {str(e)}")
-            raise
+            if isinstance(e, SensitiveInformationDetectedException):
+                error_type = "sensitive_information_detected"
+                error_data = e.detected_data
+
+            else:
+                error_type = "unclassified"
+                error_data = [str(e)]
 
             return ProcessingResult(
                 file_name=file_name,
@@ -458,5 +649,5 @@ class Pipeline:
                 num_texts=0,
                 num_images=0,
                 metadata={},
-                errors=[f"Fatal error: {str(e)}"],
+                errors={"error_type": error_type, "error_data": error_data},
             )

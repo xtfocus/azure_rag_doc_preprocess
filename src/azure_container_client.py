@@ -178,9 +178,7 @@ class AzureContainerClient(BaseAzureContainerClient):
 
                 # logger.debug(f"Successfully uploaded blob: {blob_name}")
 
-            logger.debug(
-                f"Successfully uploaded all {count} image blobs, last one is: {encoded_blob_name}"
-            )
+            logger.debug(f"Successfully uploaded all {count} image blobs")
 
         except Exception as e:
             logger.error(f"Upload images error: {str(e)}")

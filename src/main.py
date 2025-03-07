@@ -20,7 +20,12 @@ background_results = {}
 
 
 async def send_webhook_notification(
-    username: str, file_name: str, status: str, result: Dict = None
+    username: str,
+    file_name: str,
+    status: str,
+    result: Dict = None,
+    retries: int = 3,
+    backoff_factor: float = 1.0,
 ):
     """Send webhook notification about file processing status."""
 
@@ -40,14 +45,29 @@ async def send_webhook_notification(
 
     logger.info(f"Sending payload\n{payload}")
 
-    try:
-        async with httpx.AsyncClient() as client:
-            logger.debug(f"Sending to {WEBHOOK_URL}: {payload}")
-            response = await client.put(WEBHOOK_URL, json=payload)
-            logger.debug(response)
-            response.raise_for_status()
-    except Exception as e:
-        logger.error(f"Failed to send webhook notification for {file_name}: {str(e)}\n")
+    for attempt in range(retries):
+        try:
+            async with httpx.AsyncClient() as client:
+                logger.debug(f"Sending to {WEBHOOK_URL}: {payload}")
+                response = await client.put(WEBHOOK_URL, json=payload)
+
+                if response.status_code in (400, 404):
+                    logger.error(response.text)  # Check the response body for details
+
+                response.raise_for_status()
+                logger.debug(f"Webhook response: {response.status_code}")
+                return
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            logger.error(f"Webhook attempt {attempt + 1} failed: {e}")
+            if attempt < retries - 1:
+                wait_time = backoff_factor * (
+                    2**attempt
+                )  # Exponential backoff (1s → 2s → 4s)
+                logger.warning(f"Retrying in {wait_time:.2f} seconds...")
+                await asyncio.sleep(wait_time)
+            else:
+                logger.error("Webhook notification failed after all retries")
+                return
 
 
 @router.post("/api/exec/reindex/")

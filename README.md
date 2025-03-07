@@ -1,17 +1,4 @@
-# Azure customized ingestion pipeline for image and text retrieval
+Issues found:
 
-A dual-indexing system for RAG
-
-Indexing:
-- [x] extract_texts_and_images takes too long for some reason. need checks
-- [x] add summary image description before embedding
-- [x] Recognize complex pages and handle them like a total image.
-
-
-Retrieval (in my other repo):
-- [x] add image to selected context chunks
-- [x] file summary as the first retrieval round
-
-# Before pushing:
-- Make sure `.dockerignore` and Dockerfile is up to prod standard
-- limit openai access
+- parallel processing --> Error with PDFium error data format
+- https://github.com/jsvine/pdfplumber/issues/193: Need to flush cache and get_textmap.cache_clear

@@ -3,7 +3,7 @@ Define a pdf parser object that extract texts and images from doc
 while maintaining page information
 """
 
-from typing import Dict, List, Union
+from typing import Dict, Iterator, List, Union
 
 from loguru import logger
 from pdfplumber.page import Page
@@ -142,11 +142,9 @@ def pdf_extract_texts_and_images(file_content: bytes) -> Dict:
     }
 
 
-import gc
-from typing import Iterator
-
-
-def pdf_extract_texts_and_images_stream(file_content: bytes) -> Iterator[Dict]:
+def pdf_extract_texts_and_images_batch(
+    file_content: bytes, batch_size: int = 100
+) -> Iterator[Dict]:
     with pdf_blob_to_pdfplumber_doc(file_content) as doc:
         num_pages = len(doc.pages)
         process_fn = (
@@ -155,17 +153,44 @@ def pdf_extract_texts_and_images_stream(file_content: bytes) -> Iterator[Dict]:
             else process_regular_pdf_page
         )
 
-        for page_no in range(num_pages):
-            page = doc.pages[page_no]
+        # Use an iterator for doc.pages
+        page_iter = iter(doc.pages)
+        batch_texts = []
+        batch_images = []
+        batch_tables = []
+        page_no = 0
+
+        for page in page_iter:
             processing_output = process_fn(page, page_no)
 
+            page.flush_cache()
+            page.get_textmap.cache_clear()
+            page.close()
+
+            batch_texts.extend(processing_output.get("texts", []))
+            batch_images.extend(processing_output.get("images", []))
+            batch_tables.extend(processing_output.get("tables", []))
+
+            page_no += 1
+
+            # Yield a batch when batch_size is reached
+            if page_no % batch_size == 0:
+                yield {
+                    "texts": batch_texts,
+                    "images": batch_images,
+                    "tables": batch_tables,
+                    "num_pages": num_pages,
+                }
+                # Clear the batch data
+                batch_texts = []
+                batch_images = []
+                batch_tables = []
+
+        # Yield the last batch if it has any data
+        if batch_texts or batch_images or batch_tables:
             yield {
-                "texts": processing_output.get("texts", []),
-                "images": processing_output.get("images", []),
-                "tables": processing_output.get("tables", []),
+                "texts": batch_texts,
+                "images": batch_images,
+                "tables": batch_tables,
                 "num_pages": num_pages,
             }
-
-            # Explicit cleanup
-            del page
-            gc.collect()

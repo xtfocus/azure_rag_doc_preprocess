@@ -1,7 +1,7 @@
 .PHONY: build push deploy-create deploy-update clean
 # Variables
 DOCKER_IMAGE = tung-ingest
-DOCKER_TAG=v1.0.1
+DOCKER_TAG=v1.0.2
 
 DEV_ENV_FILE = .env.dev
 PROD_ENV_FILE = .env.prod
