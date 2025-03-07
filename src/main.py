@@ -5,6 +5,7 @@ from typing import Dict, Optional
 import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from loguru import logger
+from rich import print as pprint
 
 from src.azure_container_client import AzureContainerClient
 from src.models import FileDeleteRequest, FileIndexingRequest, MyFile
@@ -43,7 +44,8 @@ async def send_webhook_notification(
         "data": result,
     }
 
-    logger.info(f"Sending payload\n{payload}")
+    pprint("Sending webhook:")
+    pprint(payload)
 
     for attempt in range(retries):
         try:

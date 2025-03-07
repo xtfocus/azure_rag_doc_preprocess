@@ -532,7 +532,7 @@ class Pipeline:
                             )
                         ],
                     )
-                    logger.debug(pii_scan_result)
+                    # logger.debug(pii_scan_result)
 
                     detected_data = check_sensitive_information(pii_scan_result)
 
@@ -543,9 +543,6 @@ class Pipeline:
                     raise e
 
                 if detected_data:
-                    logger.error(
-                        f"PII Scanning found issues. Will not index this file: {file_name}. \n"
-                    )
                     raise SensitiveInformationDetectedException(detected_data)
 
             text_chunking_output = self._create_text_chunks(

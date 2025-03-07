@@ -8,7 +8,7 @@ from loguru import logger
 async def check_pii_async(
     documents: List[Dict[str, Any]],
     service_endpoint: str,
-    retries: int = 4,
+    retries: int = 5,
     backoff_factor: float = 2,
 ) -> Dict:
     """
@@ -27,7 +27,7 @@ async def check_pii_async(
                 response = await client.post(
                     service_endpoint, json=documents, headers=headers
                 )
-                logger.debug(response.text)
+                # logger.debug(response.text)
                 response.raise_for_status()
                 return response.json()
         except (httpx.HTTPStatusError, httpx.RequestError) as e:
@@ -52,11 +52,10 @@ def check_sensitive_information(pii_scan_result: Dict[str, Any]):
 
         if entities:  # If entities list is not empty
             for entity in entities:
-                detected_data.append(
-                    {
-                        "text": entity.get("text"),
-                        "category": entity.get("category"),
-                    }
-                )
+                detected_data.append(f"{entity.get('text')} - {entity.get('category')}")
+                # {
+                #     "text": entity.get("text"),
+                #     "category": entity.get("category"),
+                # }
 
     return detected_data
